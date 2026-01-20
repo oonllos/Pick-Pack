@@ -1,357 +1,19 @@
-<!DOCTYPE html>
-<html lang="th">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Vacancy Radius Matcher (Simulation)</title>
-    <!-- Tailwind CSS for Streamlit-like styling -->
-    <script src="https://cdn.tailwindcss.com"></script>
-    <!-- Leaflet CSS & JS for Map -->
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-    <!-- Font Awesome -->
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" />
+<script>
+        // --- VAPID Public Key ---
+        const publicVapidKey = 'BADoIRIstMKN9nMxO2GapvbSSssA84-1ByEFexro6syeZScJoajrGAXDPA_atNhl0SmxfeazS-ZPUGZH3DaHvnY';
 
-    <style>
-        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
-        
-        /* Custom Scrollbar */
-        ::-webkit-scrollbar { width: 8px; height: 8px; }
-        ::-webkit-scrollbar-track { background: #f1f1f1; }
-        ::-webkit-scrollbar-thumb { background: #888; border-radius: 4px; }
-        ::-webkit-scrollbar-thumb:hover { background: #555; }
-
-        /* Streamlit-like Sidebar */
-        .sidebar { background-color: #f8f9fa; border-right: 1px solid #ddd; }
-        
-        /* Streamlit-like Toast */
-        .toast {
-            visibility: hidden;
-            min-width: 250px;
-            background-color: #333;
-            color: #fff;
-            text-align: center;
-            border-radius: 8px;
-            padding: 16px;
-            position: fixed;
-            z-index: 9999;
-            right: 30px;
-            bottom: 30px;
-            font-size: 14px;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-            opacity: 0;
-            transition: opacity 0.5s, bottom 0.5s;
-        }
-        .toast.show {
-            visibility: visible;
-            opacity: 1;
-            bottom: 50px;
+        // --- Helper: Convert Key ---
+        function urlBase64ToUint8Array(base64String) {
+            const padding = '='.repeat((4 - base64String.length % 4) % 4);
+            const base64 = (base64String + padding).replace(/\-/g, '+').replace(/_/g, '/');
+            const rawData = window.atob(base64);
+            const outputArray = new Uint8Array(rawData.length);
+            for (let i = 0; i < rawData.length; ++i) {
+                outputArray[i] = rawData.charCodeAt(i);
+            }
+            return outputArray;
         }
 
-        /* Map Container */
-        #map { height: 500px; width: 100%; border-radius: 0.5rem; z-index: 1; }
-
-        /* Phone Mockup Animation */
-        @keyframes slideDown {
-            from { transform: translateY(-100%); opacity: 0; }
-            to { transform: translateY(0); opacity: 1; }
-        }
-        .notification-slide {
-            animation: slideDown 0.5s cubic-bezier(0.4, 0, 0.2, 1) forwards;
-        }
-
-        /* Google Sheet Table Style */
-        .sheet-table th { background-color: #f3f3f3; color: #444; font-weight: 600; padding: 12px 8px; text-align: left; border-bottom: 2px solid #ddd; border-right: 1px solid #eee; }
-        .sheet-table td { padding: 8px; border-bottom: 1px solid #eee; border-right: 1px solid #eee; font-family: monospace; font-size: 13px; }
-        .sheet-table tr:hover { background-color: #f9fff9; }
-        .sheet-header { background-color: #1a7f37; color: white; padding: 10px; border-radius: 8px 8px 0 0; display: flex; align-items: center; gap: 10px; }
-        
-        /* Pulse Animation for Subscribe Button */
-        @keyframes pulse-ring {
-            0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(220, 38, 38, 0.7); }
-            70% { transform: scale(1); box-shadow: 0 0 0 10px rgba(220, 38, 38, 0); }
-            100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(220, 38, 38, 0); }
-        }
-        .pulse-btn { animation: pulse-ring 2s infinite; }
-    </style>
-</head>
-<body class="text-gray-800 bg-white h-screen flex flex-col md:flex-row overflow-hidden">
-
-    <!-- Sidebar -->
-    <aside class="sidebar w-full md:w-80 flex-shrink-0 h-full overflow-y-auto p-6 flex flex-col gap-6 relative z-20">
-        <!-- New Section: Push Notification Subscription -->
-        <div class="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-2">
-            <div class="text-xs font-semibold text-blue-600 uppercase tracking-wider mb-2">
-                <i class="fas fa-mobile-alt"></i> สถานะผู้ใช้งาน (จำลอง)
-            </div>
-            
-            <!-- Input Phone Number -->
-            <div class="mb-3">
-                <label class="block text-xs font-medium text-gray-500 mb-1">เบอร์โทรศัพท์ของคุณ</label>
-                <input type="tel" id="userPhoneInput" value="0896689687" class="w-full p-2 border border-blue-200 rounded text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none text-center font-mono font-bold text-gray-700">
-            </div>
-
-            <div id="subStatusContainer">
-                <p class="text-sm text-gray-600 mb-3 text-center">ยังไม่ได้เปิดรับการแจ้งเตือน</p>
-                <button onclick="simulateSubscription()" id="btnSubscribe" class="w-full bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold py-2 px-4 rounded shadow transition-colors flex items-center justify-center gap-2">
-                    🔔 เปิดรับ Web Push
-                </button>
-            </div>
-            <div id="subTokenContainer" class="hidden space-y-2">
-                <div class="flex items-center justify-center gap-2 text-green-600 font-bold text-sm">
-                    <i class="fas fa-check-circle"></i> พร้อมรับงานแล้ว
-                </div>
-                <div class="text-xs text-center text-gray-600">
-                    User: <span id="displayPhone" class="font-bold"></span>
-                </div>
-                <div class="bg-white p-2 rounded border border-gray-300 text-[10px] font-mono text-gray-500 break-all">
-                    Token: <span id="userTokenDisplay">Waiting...</span>
-                </div>
-                <p class="text-[10px] text-gray-400 text-center">
-                    *Token ถูกผูกกับเบอร์โทรศัพท์และบันทึกลงระบบแล้ว
-                </p>
-            </div>
-        </div>
-
-        <div>
-            <div class="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">การตั้งค่าแคมเปญ</div>
-            <h2 class="text-xl font-bold mb-4">🏢 เลือกสาขาที่ต้องการ</h2>
-            
-            <div class="mb-4">
-                <label class="block text-sm font-medium text-gray-700 mb-2">รายชื่อสาขา (เลือกได้หลายข้อ)</label>
-                <div id="branchList" class="h-64 overflow-y-auto border border-gray-300 rounded bg-white p-2 space-y-2 text-sm">
-                    <!-- Branches will be injected here -->
-                </div>
-                <p class="text-xs text-gray-400 mt-2">* ระบบจะส่งหาคนที่อยู่ใกล้สาขาใดสาขาหนึ่งที่เลือก</p>
-            </div>
-
-            <div class="mb-6">
-                <div class="flex justify-between items-center mb-1">
-                    <label class="block text-sm font-medium text-gray-700">รัศมีค้นหา (กม.)</label>
-                    <span id="radiusVal" class="text-sm font-bold text-red-600">3.0</span>
-                </div>
-                <input type="range" id="radiusSlider" min="0.5" max="15.0" step="0.5" value="3.0" 
-                    class="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-red-600">
-                <div class="flex justify-between text-xs text-gray-400 mt-1">
-                    <span>0.5 กม.</span>
-                    <span>15.0 กม.</span>
-                </div>
-            </div>
-
-            <hr class="border-gray-300 mb-4">
-
-            <button onclick="regenerateData()" class="w-full py-2 px-4 border border-gray-300 rounded text-sm hover:border-red-500 hover:text-red-500 transition-colors">
-                🔄 รีเซ็ตข้อมูลผู้สมัครใหม่
-            </button>
-        </div>
-        
-        <div class="mt-auto text-xs text-gray-400">
-            จำลองหน้าจอ Streamlit App<br>
-            โดย Gemini
-        </div>
-    </aside>
-
-    <!-- Main Content -->
-    <main class="flex-1 h-full overflow-y-auto p-4 md:p-8 relative z-10 bg-gray-50">
-        <div class="max-w-6xl mx-auto space-y-6">
-            
-            <!-- Header -->
-            <div>
-                <h1 class="text-3xl font-bold text-gray-900 mb-2">📍 ระบบจับคู่ตำแหน่งงานว่าง (Multi-Branch)</h1>
-                <p class="text-gray-600">เลือกสาขาแม็คโครเพื่อค้นหาผู้สมัครงานในพื้นที่ และจำลองการรับข้อมูลกลับเข้า Google Sheets</p>
-            </div>
-
-            <!-- Dashboard Grid -->
-            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                
-                <!-- Left: Map -->
-                <div class="lg:col-span-2">
-                    <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-4 h-full">
-                        <h3 class="text-lg font-semibold mb-3">🗺️ แผนที่แสดงผล</h3>
-                        <div id="map"></div>
-                        <div class="mt-3 flex gap-4 text-sm text-gray-600">
-                            <div class="flex items-center gap-1"><span class="w-3 h-3 rounded-full bg-red-600 inline-block border border-white shadow"></span> สาขาที่เลือก</div>
-                            <div class="flex items-center gap-1"><span class="w-3 h-3 rounded-full bg-green-500 inline-block border border-white shadow"></span> ผู้ใช้ในพื้นที่ (Target)</div>
-                            <div class="flex items-center gap-1"><span class="w-3 h-3 rounded-full bg-gray-300 inline-block"></span> อยู่นอกพื้นที่</div>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Right: Results & Actions -->
-                <div class="lg:col-span-1 flex flex-col gap-6">
-                    <!-- Metrics Card -->
-                    <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-                        <h3 class="text-sm font-medium text-gray-500 uppercase">กลุ่มเป้าหมายที่พบ</h3>
-                        <div class="mt-2 flex items-baseline">
-                            <span id="matchCount" class="text-4xl font-extrabold text-green-600">0</span>
-                            <span class="ml-2 text-sm text-gray-500">คน</span>
-                        </div>
-                        <p class="text-xs text-gray-400 mt-1">จากฐานข้อมูลทั้งหมด 100 คน</p>
-                    </div>
-
-                    <!-- List Card -->
-                    <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-0 overflow-hidden flex flex-col flex-1" style="min-height: 300px;">
-                        <div class="p-4 border-b border-gray-200 bg-gray-50">
-                            <h3 class="font-semibold">รายชื่อผู้ที่จะได้รับแจ้งเตือน</h3>
-                        </div>
-                        <div class="overflow-y-auto flex-1 p-0 bg-white" id="userListContainer">
-                            <table class="min-w-full divide-y divide-gray-200">
-                                <thead class="bg-gray-50 sticky top-0">
-                                    <tr>
-                                        <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ชื่อ</th>
-                                        <th class="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">ใกล้สาขา</th>
-                                    </tr>
-                                </thead>
-                                <tbody id="userTableBody" class="bg-white divide-y divide-gray-200 text-sm">
-                                    <!-- Rows will be injected here -->
-                                </tbody>
-                            </table>
-                        </div>
-                        <div class="p-4 border-t border-gray-200 bg-white">
-                            <button onclick="sendNotification()" class="w-full bg-red-600 hover:bg-red-700 text-white font-bold py-3 px-4 rounded shadow-lg transition-all transform hover:scale-[1.02] flex items-center justify-center gap-2">
-                                <i class="fas fa-paper-plane"></i> ยิงแคมเปญแจ้งเตือน
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Google Sheet Simulation Section -->
-            <div class="bg-white rounded-xl shadow-lg border border-gray-200 overflow-hidden">
-                <div class="sheet-header">
-                    <i class="fas fa-file-csv text-2xl"></i>
-                    <div class="flex-1">
-                        <h3 class="font-bold text-lg">Google Sheets: Responses (Live)</h3>
-                        <p class="text-xs text-green-100 opacity-90">ฐานข้อมูลผู้สมัครที่กดรับงานจากแจ้งเตือน (อัปเดตอัตโนมัติ)</p>
-                    </div>
-                    <div class="text-xs bg-white/20 px-2 py-1 rounded">Last update: <span id="lastUpdateSheet">-</span></div>
-                </div>
-                
-                <div class="overflow-x-auto">
-                    <table class="w-full sheet-table text-left border-collapse">
-                        <thead>
-                            <tr>
-                                <th class="w-10">#</th>
-                                <th>Timestamp</th>
-                                <th>User ID</th>
-                                <th>Name</th>
-                                <th>Phone</th> <!-- Added Phone Column -->
-                                <th>Applied Branch</th>
-                                <th>Distance</th>
-                                <th>Status</th>
-                            </tr>
-                        </thead>
-                        <tbody id="sheetBody" class="bg-white">
-                            <!-- Empty State -->
-                            <tr id="emptySheetRow">
-                                <td colspan="8" class="text-center py-8 text-gray-400 italic bg-gray-50">
-                                    ยังไม่มีข้อมูลการสมัครใหม่...<br>
-                                    (ลองกดปุ่ม "ยิงแคมเปญแจ้งเตือน" แล้วกด "สมัครงาน" ในมือถือจำลอง)
-                                </td>
-                            </tr>
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-
-        </div>
-    </main>
-
-    <!-- Phone Mockup Overlay -->
-    <div id="phoneMockup" class="hidden fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4 backdrop-blur-sm transition-opacity duration-300">
-        <div class="bg-white rounded-[2.5rem] border-[10px] border-gray-900 w-[340px] h-[680px] overflow-hidden relative shadow-2xl flex flex-col animate-bounce-in">
-            <!-- Dynamic Island / Notch -->
-            <div class="absolute top-0 left-1/2 transform -translate-x-1/2 w-28 h-7 bg-gray-900 rounded-b-xl z-30"></div>
-            
-            <!-- Status Bar -->
-            <div class="bg-white h-10 w-full absolute top-0 left-0 z-20 flex justify-between items-center px-6 pt-2 text-[12px] font-bold text-gray-900">
-                <span id="phoneClock">10:30</span>
-                <div class="flex gap-1">
-                    <i class="fas fa-signal"></i>
-                    <i class="fas fa-wifi"></i>
-                    <i class="fas fa-battery-full"></i>
-                </div>
-            </div>
-
-            <!-- Wallpaper / App Content -->
-            <div class="flex-1 bg-gray-100 pt-14 px-4 relative flex flex-col overflow-y-auto pb-10">
-                 
-                 <!-- Notification Banner (Initial State) -->
-                 <div id="notificationCard" class="w-full bg-white p-4 rounded-2xl shadow-lg border border-gray-100 mb-4 transform translate-y-[-150%] opacity-0 transition-all duration-500 cursor-pointer hover:bg-gray-50" onclick="expandNotification()">
-                    <div class="flex items-start gap-3">
-                        <div class="bg-red-600 w-10 h-10 rounded-xl flex items-center justify-center shadow-sm shrink-0">
-                            <i class="fas fa-store text-white text-lg"></i>
-                        </div>
-                        <div class="flex-1 min-w-0">
-                            <div class="flex justify-between items-start">
-                                <h4 class="font-bold text-sm text-gray-900 truncate">Makro Job Alert</h4>
-                                <span class="text-[10px] text-gray-400 shrink-0 ml-1">เมื่อสักครู่</span>
-                            </div>
-                            <p class="text-xs text-gray-600 mt-1 leading-snug">
-                                งานจัดเรียงสินค้า ด่วน! <br>
-                                สาขาที่ใกล้คุณ: <span id="notifBranchName" class="font-semibold text-red-600">Makro XXX</span>
-                            </p>
-                        </div>
-                    </div>
-                 </div>
-
-                 <!-- Detailed Job View (Expanded State) -->
-                 <div id="jobDetailView" class="hidden bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden flex-col h-full animate-fade-in">
-                    <div class="h-32 bg-red-600 relative flex items-end p-4">
-                        <h2 class="text-white font-bold text-xl">พนักงานชั่วคราว</h2>
-                        <div class="absolute top-4 right-4 bg-white/20 backdrop-blur rounded-full px-2 py-1 text-xs text-white">Part-time</div>
-                    </div>
-                    <div class="p-5 flex-1 flex flex-col gap-4">
-                        <div>
-                            <div class="text-xs text-gray-500 uppercase font-semibold">สถานที่ปฏิบัติงาน</div>
-                            <div id="detailBranchName" class="text-lg font-bold text-gray-800">Makro Sathorn</div>
-                            <div class="flex items-center gap-1 text-sm text-green-600 mt-1">
-                                <i class="fas fa-location-arrow"></i>
-                                <span id="detailDistance">ห่างไป 1.2 กม.</span>
-                            </div>
-                        </div>
-
-                        <div class="grid grid-cols-2 gap-3">
-                            <div class="bg-gray-50 p-3 rounded-lg text-center">
-                                <div class="text-xs text-gray-500">ค่าตอบแทน</div>
-                                <div class="font-bold text-gray-800">500บ./วัน</div>
-                            </div>
-                            <div class="bg-gray-50 p-3 rounded-lg text-center">
-                                <div class="text-xs text-gray-500">เวลา</div>
-                                <div class="font-bold text-gray-800">08:00 - 17:00</div>
-                            </div>
-                        </div>
-
-                        <div class="mt-auto space-y-3 pt-4">
-                             <button onclick="acceptJob()" class="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-3 rounded-xl shadow-lg transition-transform active:scale-95 flex items-center justify-center gap-2">
-                                ✅ สมัครงานทันที
-                             </button>
-                             <button onclick="closePhoneMockup()" class="w-full bg-white border border-gray-300 text-gray-600 font-bold py-3 rounded-xl hover:bg-gray-50">
-                                ไว้คราวหน้า
-                             </button>
-                        </div>
-                    </div>
-                 </div>
-
-            </div>
-
-            <!-- Home Indicator -->
-            <div class="absolute bottom-1 left-1/2 transform -translate-x-1/2 w-32 h-1 bg-gray-400 rounded-full mb-2"></div>
-        </div>
-    </div>
-
-    <!-- Toast Notification (System) -->
-    <div id="toast" class="toast">
-        <div class="flex items-center gap-3">
-            <i class="fas fa-check-circle text-green-400 text-xl"></i>
-            <div class="text-left">
-                <div class="font-bold">สำเร็จ!</div>
-                <div id="toastMessage" class="text-sm text-gray-300">...</div>
-            </div>
-        </div>
-    </div>
-
-    <script>
         // --- 1. Database Configuration (Makro Branches) ---
         const MAKRO_BRANCHES = [
             { id: 'MK01', name: 'Makro Sathorn', lat: 13.7025, lon: 100.5431 },
@@ -367,26 +29,126 @@
         ];
 
         // --- State Variables ---
-        let selectedBranchIds = new Set(['MK01']); // Default Select Sathorn
+        let selectedBranchIds = new Set(['MK01']);
         let radiusKm = 3.0;
         let users = [];
-        let matchedUsers = []; // Users found in current search
-        let sheetData = []; // Simulated Google Sheet Data
-        
-        // Map Objects
+        let matchedUsers = [];
+        let sheetData = [];
         let map, userLayerGroup, branchLayerGroup;
 
-        // --- 2. Logic: User Generation & Distance ---
-        
+        // --- 2. Real Web Push Logic ---
+        async function simulateSubscription() {
+            const btn = document.getElementById('btnSubscribe');
+            const statusContainer = document.getElementById('subStatusContainer');
+            const tokenContainer = document.getElementById('subTokenContainer');
+            const phoneInput = document.getElementById('userPhoneInput');
+            const phoneVal = phoneInput.value;
+
+            if ('serviceWorker' in navigator) {
+                btn.innerHTML = '<i class="fas fa-circle-notch fa-spin"></i> กำลังเชื่อมต่อ...';
+                
+                try {
+                    // 1. Register Service Worker
+                    const register = await navigator.serviceWorker.register('/worker.js', {
+                        scope: '/'
+                    });
+
+                    // 2. Subscribe to Push Manager
+                    const subscription = await register.pushManager.subscribe({
+                        userVisibleOnly: true,
+                        applicationServerKey: urlBase64ToUint8Array(publicVapidKey)
+                    });
+
+                    // 3. Send Subscription to Backend
+                    await fetch('/subscribe', {
+                        method: 'POST',
+                        body: JSON.stringify(subscription),
+                        headers: {
+                            'content-type': 'application/json'
+                        }
+                    });
+
+                    // UI Success Update
+                    statusContainer.classList.add('hidden');
+                    tokenContainer.classList.remove('hidden');
+                    document.getElementById('userTokenDisplay').textContent = "Connected via VAPID";
+                    document.getElementById('displayPhone').textContent = phoneVal;
+                    showToast(`✅ เชื่อมต่อ Server เรียบร้อย`, true);
+
+                } catch (err) {
+                    console.error(err);
+                    showToast(`❌ เชื่อมต่อล้มเหลว: ${err.message}`, false);
+                    btn.innerHTML = 'ลองใหม่อีกครั้ง';
+                }
+            } else {
+                showToast("Browser นี้ไม่รองรับ Service Worker", false);
+            }
+        }
+
+        async function sendNotification() {
+            if (selectedBranchIds.size === 0) {
+                showToast("กรุณาเลือกสาขาอย่างน้อย 1 สาขา", false);
+                return;
+            }
+
+            // เลือกสาขาแรกที่เป็นเป้าหมาย
+            const targetBranch = MAKRO_BRANCHES.find(b => b.id === Array.from(selectedBranchIds)[0]);
+
+            // ยิง Request ไปที่ Backend เพื่อให้ส่ง Push กลับมาที่ Browser นี้
+            try {
+                await fetch('/trigger-push', {
+                    method: 'POST',
+                    body: JSON.stringify({
+                        branch: targetBranch.name,
+                        message: `งานจัดเรียงสินค้า ด่วน! สาขา ${targetBranch.name} ต้องการคน!`
+                    }),
+                    headers: { 'content-type': 'application/json' }
+                });
+
+                showToast(`ส่งคำสั่งไปยัง Server เรียบร้อย! (รอดูการแจ้งเตือน)`, true);
+                
+                // --- ส่วน UI Mockup (เพื่อให้ App ยังทำงานเหมือนเดิม) ---
+                if (matchedUsers.length > 0) {
+                     const demoUser = matchedUsers[Math.floor(Math.random() * matchedUsers.length)];
+                     const phoneInput = document.getElementById('userPhoneInput');
+                     if (phoneInput && phoneInput.value) demoUser.phone = phoneInput.value;
+                     
+                     window.currentDemoUser = demoUser; // Save for applying
+
+                     // update mockup text
+                     document.getElementById('notifBranchName').textContent = targetBranch.name;
+                     document.getElementById('detailBranchName').textContent = targetBranch.name;
+                     document.getElementById('detailDistance').textContent = `ห่างไป ${demoUser.distance.toFixed(2)} กม.`;
+                     
+                     // Show Phone Overlay after delay
+                     setTimeout(() => {
+                        document.getElementById('phoneMockup').classList.remove('hidden');
+                        document.getElementById('notificationCard').style.transform = "translateY(-150%)";
+                        document.getElementById('notificationCard').style.opacity = "0";
+                        document.getElementById('notificationCard').classList.remove("hidden");
+                        document.getElementById('jobDetailView').classList.add("hidden");
+
+                        setTimeout(() => {
+                            const card = document.getElementById('notificationCard');
+                            card.classList.add('notification-slide');
+                        }, 500);
+                     }, 2000); // Delay นิดหน่อยให้ Push เข้ามาก่อน
+                }
+
+            } catch (err) {
+                console.error(err);
+                showToast("เกิดข้อผิดพลาดในการส่ง", false);
+            }
+        }
+
+        // --- 3. Logic: User Generation & Map (เหมือนเดิม) ---
         function generateUsers(count = 100) {
-            // Generate users scattered around Bangkok (roughly center 13.75, 100.55)
+            constnames = ["สมชาย", "วิชัย", "กานดา", "มานี", "ปิติ", "ชูใจ", "วีระ", "สุดา", "สมศักดิ์", "อารี", "จิราพร", "ณัฐพล"];
             const names = ["สมชาย", "วิชัย", "กานดา", "มานี", "ปิติ", "ชูใจ", "วีระ", "สุดา", "สมศักดิ์", "อารี", "จิราพร", "ณัฐพล"];
             const newData = [];
             for (let i = 0; i < count; i++) {
-                // Randomly distribute within a box covering most branches
                 const lat = 13.60 + Math.random() * 0.45; 
                 const lon = 100.35 + Math.random() * 0.40;
-                
                 newData.push({
                     id: `U${(i+1).toString().padStart(4, '0')}`,
                     name: `คุณ${names[Math.floor(Math.random() * names.length)]}`,
@@ -402,25 +164,18 @@
             const R = 6371;
             const dLat = deg2rad(lat2 - lat1);
             const dLon = deg2rad(lon2 - lon1);
-            const a = 
-                Math.sin(dLat/2) * Math.sin(dLat/2) +
-                Math.cos(deg2rad(lat1)) * Math.cos(deg2rad(lat2)) * Math.sin(dLon/2) * Math.sin(dLon/2); 
+            const a = Math.sin(dLat/2) * Math.sin(dLat/2) + Math.cos(deg2rad(lat1)) * Math.cos(deg2rad(lat2)) * Math.sin(dLon/2) * Math.sin(dLon/2); 
             const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a)); 
             return R * c;
         }
         function deg2rad(deg) { return deg * (Math.PI/180); }
 
-        // --- 3. Core Logic: Matching Users to Multiple Branches ---
-
         function findMatches() {
             matchedUsers = [];
             const selectedBranches = MAKRO_BRANCHES.filter(b => selectedBranchIds.has(b.id));
-
             users.forEach(user => {
                 let minDistance = Infinity;
                 let nearestBranch = null;
-
-                // Find the nearest selected branch for this user
                 selectedBranches.forEach(branch => {
                     const dist = getDistanceFromLatLonInKm(branch.lat, branch.lon, user.lat, user.lon);
                     if (dist < minDistance) {
@@ -428,8 +183,6 @@
                         nearestBranch = branch;
                     }
                 });
-
-                // Check if the nearest branch is within radius
                 if (minDistance <= radiusKm && nearestBranch) {
                     matchedUsers.push({
                         ...user,
@@ -438,39 +191,31 @@
                     });
                 }
             });
-
-            // Sort by distance
             matchedUsers.sort((a, b) => a.distance - b.distance);
             return matchedUsers;
         }
 
         // --- 4. UI Updates ---
-
         function initSidebar() {
             const container = document.getElementById('branchList');
             container.innerHTML = '';
-            
             MAKRO_BRANCHES.forEach(branch => {
                 const div = document.createElement('div');
                 div.className = 'flex items-center gap-2 p-1 hover:bg-gray-100 rounded';
-                
                 const checkbox = document.createElement('input');
                 checkbox.type = 'checkbox';
                 checkbox.id = `chk-${branch.id}`;
                 checkbox.checked = selectedBranchIds.has(branch.id);
                 checkbox.className = 'w-4 h-4 text-red-600 rounded border-gray-300 focus:ring-red-500';
-                
                 checkbox.addEventListener('change', (e) => {
                     if (e.target.checked) selectedBranchIds.add(branch.id);
                     else selectedBranchIds.delete(branch.id);
                     updateDashboard();
                 });
-
                 const label = document.createElement('label');
                 label.htmlFor = `chk-${branch.id}`;
                 label.className = 'cursor-pointer flex-1 text-gray-700';
                 label.textContent = branch.name;
-
                 div.appendChild(checkbox);
                 div.appendChild(label);
                 container.appendChild(div);
@@ -478,224 +223,85 @@
         }
 
         function updateDashboard() {
-            // Update Slider Text
             document.getElementById('radiusVal').textContent = radiusKm.toFixed(1);
-
-            // Run Logic
             const matches = findMatches();
-
-            // 1. Update Metrics
             document.getElementById('matchCount').textContent = matches.length;
-            
-            // 2. Update Table List
             const tableBody = document.getElementById('userTableBody');
             tableBody.innerHTML = '';
             matches.forEach(u => {
-                const row = `
-                    <tr>
+                const row = `<tr>
                         <td class="px-4 py-2 whitespace-nowrap text-gray-900">${u.name}</td>
                         <td class="px-4 py-2 whitespace-nowrap text-right text-gray-500">
                             <div class="text-xs text-gray-400">${u.nearestBranchName}</div>
                             <div class="font-mono font-bold">${u.distance.toFixed(2)} กม.</div>
                         </td>
-                    </tr>
-                `;
+                    </tr>`;
                 tableBody.innerHTML += row;
             });
-
-            // 3. Update Map
             updateMap(matches);
         }
 
         function updateMap(matches) {
             userLayerGroup.clearLayers();
             branchLayerGroup.clearLayers();
-
             const selectedBranches = MAKRO_BRANCHES.filter(b => selectedBranchIds.has(b.id));
-
-            // Draw Selected Branches & Radius
             selectedBranches.forEach(branch => {
-                // Marker
                 const branchIcon = L.divIcon({
                     className: 'branch-icon',
                     html: '<div style="background-color: #dc2626; width: 14px; height: 14px; border-radius: 50%; border: 2px solid white; box-shadow: 0 2px 4px rgba(0,0,0,0.3);"></div>',
                     iconSize: [18, 18],
                     iconAnchor: [9, 9]
                 });
-                L.marker([branch.lat, branch.lon], { icon: branchIcon })
-                    .bindPopup(`<b>${branch.name}</b>`)
-                    .addTo(branchLayerGroup);
-
-                // Radius Circle
-                L.circle([branch.lat, branch.lon], {
-                    color: 'red',
-                    fillColor: '#f03',
-                    fillOpacity: 0.05,
-                    weight: 1,
-                    radius: radiusKm * 1000
-                }).addTo(branchLayerGroup);
+                L.marker([branch.lat, branch.lon], { icon: branchIcon }).bindPopup(`<b>${branch.name}</b>`).addTo(branchLayerGroup);
+                L.circle([branch.lat, branch.lon], { color: 'red', fillColor: '#f03', fillOpacity: 0.05, weight: 1, radius: radiusKm * 1000 }).addTo(branchLayerGroup);
             });
-
-            // Draw Matched Users
             const matchIds = new Set(matches.map(m => m.id));
-
             users.forEach(u => {
                 const isMatch = matchIds.has(u.id);
-                const color = isMatch ? '#22c55e' : '#cbd5e1'; // Green or Gray
+                const color = isMatch ? '#22c55e' : '#cbd5e1'; 
                 const zIndex = isMatch ? 1000 : 1;
-                
                 const markerHtml = `<div style="background-color: ${color}; width: 8px; height: 8px; border-radius: 50%; border: 1px solid white;"></div>`;
-                
-                const customIcon = L.divIcon({
-                    className: 'custom-div-icon',
-                    html: markerHtml,
-                    iconSize: [10, 10]
-                });
-
-                L.marker([u.lat, u.lon], { icon: customIcon, zIndexOffset: zIndex })
-                    .bindPopup(`<b>${u.name}</b><br>ID: ${u.id}`)
-                    .addTo(userLayerGroup);
+                const customIcon = L.divIcon({ className: 'custom-div-icon', html: markerHtml, iconSize: [10, 10] });
+                L.marker([u.lat, u.lon], { icon: customIcon, zIndexOffset: zIndex }).bindPopup(`<b>${u.name}</b><br>ID: ${u.id}`).addTo(userLayerGroup);
             });
-
-            // Fit bounds to show all selected branches
             if (selectedBranches.length > 0) {
                 const group = new L.featureGroup(selectedBranches.map(b => L.marker([b.lat, b.lon])));
                 map.fitBounds(group.getBounds().pad(0.5));
             }
         }
 
-        // --- 5. Simulation & Notification Logic ---
-
-        // >>> NEW: Subscription Simulation Logic
-        function simulateSubscription() {
-            const btn = document.getElementById('btnSubscribe');
-            const statusContainer = document.getElementById('subStatusContainer');
-            const tokenContainer = document.getElementById('subTokenContainer');
-            const phoneInput = document.getElementById('userPhoneInput');
-            const phoneVal = phoneInput.value;
-            
-            // 1. Simulate "Asking" State
-            btn.innerHTML = '<i class="fas fa-circle-notch fa-spin"></i> กำลังขอสิทธิ์...';
-            btn.disabled = true;
-            phoneInput.disabled = true; // Lock input
-
-            // 2. Simulate Delay (Browser Permission Dialog)
-            setTimeout(() => {
-                // 3. Ask Browser Permission (Real API Call attempt, fallback to simul)
-                if ("Notification" in window) {
-                    Notification.requestPermission().then(permission => {
-                        finishSubscription(phoneVal);
-                    });
-                } else {
-                    // Fallback for environment without Notification API
-                    finishSubscription(phoneVal);
-                }
-            }, 1000);
-
-            function finishSubscription(phone) {
-                // 4. Generate Fake FCM Token
-                const fakeToken = "fcm_" + phone + "_" + Math.random().toString(36).substr(2, 10);
-                
-                statusContainer.classList.add('hidden');
-                tokenContainer.classList.remove('hidden');
-                document.getElementById('userTokenDisplay').textContent = fakeToken;
-                document.getElementById('displayPhone').textContent = phone;
-                
-                showToast(`✅ ลงทะเบียนเบอร์ ${phone} เรียบร้อย`, true);
-            }
-        }
-
-        function sendNotification() {
-            if (selectedBranchIds.size === 0) {
-                showToast("กรุณาเลือกสาขาอย่างน้อย 1 สาขา", false);
-                return;
-            }
-            if (matchedUsers.length === 0) {
-                showToast("ไม่พบผู้ใช้ในเงื่อนไข กรุณาขยายรัศมี", false);
-                return;
-            }
-
-            // Show Toast
-            showToast(`ส่งแจ้งเตือนไปยัง ${matchedUsers.length} ท่านเรียบร้อย!`, true);
-
-            // Prepare Phone Mockup Data (Pick a random matched user for demo)
-            const demoUser = matchedUsers[Math.floor(Math.random() * matchedUsers.length)];
-            
-            // Reset Phone UI
-            document.getElementById('notificationCard').style.transform = "translateY(-150%)";
-            document.getElementById('notificationCard').style.opacity = "0";
-            document.getElementById('notificationCard').classList.remove("hidden");
-            document.getElementById('jobDetailView').classList.add("hidden");
-            
-            // Populate Data
-            document.getElementById('notifBranchName').textContent = demoUser.nearestBranchName;
-            document.getElementById('detailBranchName').textContent = demoUser.nearestBranchName;
-            document.getElementById('detailDistance').textContent = `ห่างไป ${demoUser.distance.toFixed(2)} กม.`;
-            
-            // Store current demo user for "Apply" action
-            window.currentDemoUser = demoUser;
-            
-            // Check if user has entered phone number
-            const phoneInput = document.getElementById('userPhoneInput');
-            if (phoneInput && phoneInput.value) {
-                // Override demo user's phone with the manually entered one for the simulation record
-                window.currentDemoUser.phone = phoneInput.value;
-            }
-
-            // Show Phone Overlay
-            setTimeout(() => {
-                document.getElementById('phoneMockup').classList.remove('hidden');
-                
-                // Slide in Notification
-                setTimeout(() => {
-                    const card = document.getElementById('notificationCard');
-                    card.classList.add('notification-slide');
-                }, 500);
-            }, 800);
-        }
-
+        // --- 5. App Logic ---
         function expandNotification() {
             document.getElementById('notificationCard').classList.add("hidden");
             document.getElementById('jobDetailView').classList.remove("hidden");
         }
 
         function acceptJob() {
-            // 1. Add to Sheet Data
             const user = window.currentDemoUser;
             const now = new Date();
             const timestamp = now.toLocaleString('th-TH');
-            
             const newRow = {
                 no: sheetData.length + 1,
                 timestamp: timestamp,
                 id: user.id,
                 name: user.name,
-                phone: user.phone || "-", // Add Phone
+                phone: user.phone || "-",
                 location: `${user.lat.toFixed(4)}, ${user.lon.toFixed(4)}`,
                 branch: user.nearestBranchName,
                 distance: `${user.distance.toFixed(2)} km`,
                 status: 'Applied'
             };
-            
-            sheetData.unshift(newRow); // Add to top
-            
-            // 2. Render Table
+            sheetData.unshift(newRow);
             renderSheetTable();
-            
-            // 3. UI Feedback
             closePhoneMockup();
-            showToast(`✅ บันทึกข้อมูล ${user.name} (${user.phone}) ลง Google Sheets แล้ว`, true);
-
-            // Scroll to table
+            showToast(`✅ บันทึกข้อมูล ${user.name} ลง Google Sheets แล้ว`, true);
             document.querySelector('.sheet-table').scrollIntoView({ behavior: 'smooth' });
         }
 
         function renderSheetTable() {
             const tbody = document.getElementById('sheetBody');
             tbody.innerHTML = '';
-
             document.getElementById('lastUpdateSheet').textContent = new Date().toLocaleTimeString('th-TH');
-
             sheetData.forEach(row => {
                 const tr = document.createElement('tr');
                 tr.innerHTML = `
@@ -721,10 +327,8 @@
             const toast = document.getElementById("toast");
             const icon = toast.querySelector("i");
             const text = document.getElementById("toastMessage");
-            
             text.textContent = msg;
             icon.className = isSuccess ? "fas fa-check-circle text-green-400 text-xl" : "fas fa-exclamation-circle text-yellow-400 text-xl";
-            
             toast.className = "toast show";
             setTimeout(() => { toast.className = toast.className.replace("show", ""); }, 3000);
         }
@@ -736,25 +340,18 @@
 
         // --- Init ---
         window.onload = function() {
-            // Init Map centered on Bangkok
             map = L.map('map').setView([13.7563, 100.5018], 10);
             L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
                 attribution: '&copy; OpenStreetMap &copy; CARTO',
                 maxZoom: 19
             }).addTo(map);
-
             userLayerGroup = L.layerGroup().addTo(map);
             branchLayerGroup = L.layerGroup().addTo(map);
-
             initSidebar();
-            regenerateData(); // Will also updateDashboard
-
-            // Event Listeners
+            regenerateData();
             document.getElementById('radiusSlider').addEventListener('input', function(e) {
                 radiusKm = parseFloat(e.target.value);
                 updateDashboard();
             });
         };
     </script>
-</body>
-</html>
