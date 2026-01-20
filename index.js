@@ -54,11 +54,29 @@ app.post('/subscribe', (req, res) => {
 app.post('/trigger-push', (req, res) => {
     const { message, branch } = req.body;
 
+    // สร้างข้อมูลแจ้งเตือน
     const notificationPayload = JSON.stringify({
         title: `⚡ งานด่วน! สาขา ${branch || 'ไม่ระบุ'}`,
         body: message || 'มีตำแหน่งงานว่าง รีบสมัครด่วน!',
-        icon: 'https://cdn-icons-png.flaticon.com/512/3135/3135715.png'
+        icon: 'https://cdn-icons-png.flaticon.com/512/3135/3135715.png',
+        // ส่วนที่เพิ่มใหม่: แนบลิ้งค์พร้อมรหัส ?mode=apply
+        data: {
+            url: '/?mode=apply' 
+        }
     });
+
+    console.log(`🚀 กำลังส่งแจ้งเตือนไปยัง ${subscriptions.length} คน...`);
+
+    Promise.all(subscriptions.map(sub => 
+        webpush.sendNotification(sub, notificationPayload)
+            .catch(err => {
+                console.error("ส่งไม่ผ่าน:", err.statusCode);
+                return null; 
+            })
+    ))
+    .then(() => res.json({ success: true, count: subscriptions.length }))
+    .catch(err => res.status(500).json({ error: 'Failed to send notifications' }));
+});
 
     console.log(`🚀 กำลังส่งแจ้งเตือนไปยัง ${subscriptions.length} คน...`);
 
