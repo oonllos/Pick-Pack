@@ -54,13 +54,13 @@ app.post('/subscribe', (req, res) => {
 app.post('/trigger-push', (req, res) => {
     const { message, branch } = req.body;
 
-    // สร้างข้อมูลแจ้งเตือน (พร้อม Deep Link ?mode=apply)
     const notificationPayload = JSON.stringify({
         title: `⚡ งานด่วน! สาขา ${branch || 'ไม่ระบุ'}`,
         body: message || 'มีตำแหน่งงานว่าง รีบสมัครด่วน!',
         icon: 'https://cdn-icons-png.flaticon.com/512/3135/3135715.png',
         data: {
-            url: '/?mode=apply' // รหัสลับสำหรับเปิดหน้าสมัครงาน
+            // ⭐ แก้ตรงนี้: ใส่ URL เต็มๆ ของเว็บคุณลงไปเลย
+            url: 'https://oonllos.github.io/Pick-Pack/?mode=apply' 
         }
     });
 
