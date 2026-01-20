@@ -1,4 +1,4 @@
-// worker.js - ฉบับแก้ไข (Fix Navigation Issue)
+// worker.js - ฉบับแก้ไข (Fix Navigation & Force Apply Page)
 
 self.addEventListener('push', function(event) {
   let data = {};
@@ -28,12 +28,13 @@ self.addEventListener('notificationclick', function(event) {
   // 1. ปิดการแจ้งเตือนทันที
   event.notification.close();
 
-  // 2. ดึง URL อย่างปลอดภัย (ป้องกัน Error)
+  // 2. ดึง URL และตรวจสอบความถูกต้อง
   const notificationData = event.notification.data || {};
   let urlToOpen = notificationData.url;
 
-  // ถ้าไม่มี URL แนบมา ให้ใช้ค่า Default นี้
-  if (!urlToOpen) {
+  // ⭐ แก้ไขจุดสำคัญ: ถ้า URL ว่างเปล่า หรือเป็นลิ้งค์เก่า (/?mode=apply) ให้บังคับไปหน้า apply.html
+  // เพื่อป้องกันไม่ให้เด้งกลับไปหน้า Home
+  if (!urlToOpen || urlToOpen === '/' || urlToOpen.includes('?mode=apply')) {
       urlToOpen = 'https://oonllos.github.io/Pick-Pack/apply.html';
   }
 
