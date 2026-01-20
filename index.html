@@ -65,12 +65,54 @@
         .sheet-table td { padding: 8px; border-bottom: 1px solid #eee; border-right: 1px solid #eee; font-family: monospace; font-size: 13px; }
         .sheet-table tr:hover { background-color: #f9fff9; }
         .sheet-header { background-color: #1a7f37; color: white; padding: 10px; border-radius: 8px 8px 0 0; display: flex; align-items: center; gap: 10px; }
+        
+        /* Pulse Animation for Subscribe Button */
+        @keyframes pulse-ring {
+            0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(220, 38, 38, 0.7); }
+            70% { transform: scale(1); box-shadow: 0 0 0 10px rgba(220, 38, 38, 0); }
+            100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(220, 38, 38, 0); }
+        }
+        .pulse-btn { animation: pulse-ring 2s infinite; }
     </style>
 </head>
 <body class="text-gray-800 bg-white h-screen flex flex-col md:flex-row overflow-hidden">
 
     <!-- Sidebar -->
     <aside class="sidebar w-full md:w-80 flex-shrink-0 h-full overflow-y-auto p-6 flex flex-col gap-6 relative z-20">
+        <!-- New Section: Push Notification Subscription -->
+        <div class="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-2">
+            <div class="text-xs font-semibold text-blue-600 uppercase tracking-wider mb-2">
+                <i class="fas fa-mobile-alt"></i> สถานะผู้ใช้งาน (จำลอง)
+            </div>
+            
+            <!-- Input Phone Number -->
+            <div class="mb-3">
+                <label class="block text-xs font-medium text-gray-500 mb-1">เบอร์โทรศัพท์ของคุณ</label>
+                <input type="tel" id="userPhoneInput" value="0896689687" class="w-full p-2 border border-blue-200 rounded text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none text-center font-mono font-bold text-gray-700">
+            </div>
+
+            <div id="subStatusContainer">
+                <p class="text-sm text-gray-600 mb-3 text-center">ยังไม่ได้เปิดรับการแจ้งเตือน</p>
+                <button onclick="simulateSubscription()" id="btnSubscribe" class="w-full bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold py-2 px-4 rounded shadow transition-colors flex items-center justify-center gap-2">
+                    🔔 เปิดรับ Web Push
+                </button>
+            </div>
+            <div id="subTokenContainer" class="hidden space-y-2">
+                <div class="flex items-center justify-center gap-2 text-green-600 font-bold text-sm">
+                    <i class="fas fa-check-circle"></i> พร้อมรับงานแล้ว
+                </div>
+                <div class="text-xs text-center text-gray-600">
+                    User: <span id="displayPhone" class="font-bold"></span>
+                </div>
+                <div class="bg-white p-2 rounded border border-gray-300 text-[10px] font-mono text-gray-500 break-all">
+                    Token: <span id="userTokenDisplay">Waiting...</span>
+                </div>
+                <p class="text-[10px] text-gray-400 text-center">
+                    *Token ถูกผูกกับเบอร์โทรศัพท์และบันทึกลงระบบแล้ว
+                </p>
+            </div>
+        </div>
+
         <div>
             <div class="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">การตั้งค่าแคมเปญ</div>
             <h2 class="text-xl font-bold mb-4">🏢 เลือกสาขาที่ต้องการ</h2>
@@ -193,7 +235,7 @@
                                 <th>Timestamp</th>
                                 <th>User ID</th>
                                 <th>Name</th>
-                                <th>Location (Lat, Lon)</th>
+                                <th>Phone</th> <!-- Added Phone Column -->
                                 <th>Applied Branch</th>
                                 <th>Distance</th>
                                 <th>Status</th>
@@ -349,7 +391,8 @@
                     id: `U${(i+1).toString().padStart(4, '0')}`,
                     name: `คุณ${names[Math.floor(Math.random() * names.length)]}`,
                     lat: lat,
-                    lon: lon
+                    lon: lon,
+                    phone: "08" + Math.floor(Math.random() * 90000000 + 10000000).toString()
                 });
             }
             return newData;
@@ -523,6 +566,45 @@
 
         // --- 5. Simulation & Notification Logic ---
 
+        // >>> NEW: Subscription Simulation Logic
+        function simulateSubscription() {
+            const btn = document.getElementById('btnSubscribe');
+            const statusContainer = document.getElementById('subStatusContainer');
+            const tokenContainer = document.getElementById('subTokenContainer');
+            const phoneInput = document.getElementById('userPhoneInput');
+            const phoneVal = phoneInput.value;
+            
+            // 1. Simulate "Asking" State
+            btn.innerHTML = '<i class="fas fa-circle-notch fa-spin"></i> กำลังขอสิทธิ์...';
+            btn.disabled = true;
+            phoneInput.disabled = true; // Lock input
+
+            // 2. Simulate Delay (Browser Permission Dialog)
+            setTimeout(() => {
+                // 3. Ask Browser Permission (Real API Call attempt, fallback to simul)
+                if ("Notification" in window) {
+                    Notification.requestPermission().then(permission => {
+                        finishSubscription(phoneVal);
+                    });
+                } else {
+                    // Fallback for environment without Notification API
+                    finishSubscription(phoneVal);
+                }
+            }, 1000);
+
+            function finishSubscription(phone) {
+                // 4. Generate Fake FCM Token
+                const fakeToken = "fcm_" + phone + "_" + Math.random().toString(36).substr(2, 10);
+                
+                statusContainer.classList.add('hidden');
+                tokenContainer.classList.remove('hidden');
+                document.getElementById('userTokenDisplay').textContent = fakeToken;
+                document.getElementById('displayPhone').textContent = phone;
+                
+                showToast(`✅ ลงทะเบียนเบอร์ ${phone} เรียบร้อย`, true);
+            }
+        }
+
         function sendNotification() {
             if (selectedBranchIds.size === 0) {
                 showToast("กรุณาเลือกสาขาอย่างน้อย 1 สาขา", false);
@@ -552,6 +634,13 @@
             
             // Store current demo user for "Apply" action
             window.currentDemoUser = demoUser;
+            
+            // Check if user has entered phone number
+            const phoneInput = document.getElementById('userPhoneInput');
+            if (phoneInput && phoneInput.value) {
+                // Override demo user's phone with the manually entered one for the simulation record
+                window.currentDemoUser.phone = phoneInput.value;
+            }
 
             // Show Phone Overlay
             setTimeout(() => {
@@ -581,6 +670,7 @@
                 timestamp: timestamp,
                 id: user.id,
                 name: user.name,
+                phone: user.phone || "-", // Add Phone
                 location: `${user.lat.toFixed(4)}, ${user.lon.toFixed(4)}`,
                 branch: user.nearestBranchName,
                 distance: `${user.distance.toFixed(2)} km`,
@@ -594,7 +684,7 @@
             
             // 3. UI Feedback
             closePhoneMockup();
-            showToast(`✅ บันทึกข้อมูล ${user.name} ลง Google Sheets แล้ว`, true);
+            showToast(`✅ บันทึกข้อมูล ${user.name} (${user.phone}) ลง Google Sheets แล้ว`, true);
 
             // Scroll to table
             document.querySelector('.sheet-table').scrollIntoView({ behavior: 'smooth' });
@@ -613,6 +703,7 @@
                     <td class="text-gray-600">${row.timestamp}</td>
                     <td class="font-bold text-blue-600">${row.id}</td>
                     <td>${row.name}</td>
+                    <td class="font-mono text-gray-700">${row.phone}</td>
                     <td class="text-xs text-gray-500">${row.location}</td>
                     <td><span class="bg-red-100 text-red-800 px-2 py-1 rounded-full text-xs font-bold">${row.branch}</span></td>
                     <td>${row.distance}</td>
