@@ -1,6 +1,6 @@
-// index.js
+// index.js ฉบับแก้ไขสมบูรณ์ (20 Jan 2026)
 
-// โหลดตัวจัดการ Environment Variables (เผื่อใช้ในเครื่อง)
+// 1. โหลด Environment Variables
 require('dotenv').config();
 
 const express = require('express');
@@ -10,86 +10,75 @@ const cors = require('cors');
 
 const app = express();
 
-// อนุญาตให้ทุกเว็บไซต์ (CORS) เข้าถึงได้ (จำเป็นสำหรับ Github Pages)
+// 2. ตั้งค่า Server
 app.use(cors());
 app.use(bodyParser.json());
 
-// --- ส่วนที่แก้ไข: ดึงค่าจาก Environment Variables ---
-// ข้อมูลเหล่านี้จะถูกดึงมาจากหน้า Setting ของ Render ที่คุณกรอกไว้
+// 3. ดึงค่า Key จาก Render
 const publicVapidKey = process.env.PUBLIC_VAPID_KEY;
 const privateVapidKey = process.env.PRIVATE_VAPID_KEY;
 const mailtoEmail = process.env.MAILTO_EMAIL || 'mailto:oonllos@gmail.com';
 
-// ตรวจสอบว่าใส่ Key ครบไหม (กันพลาด)
+// ตรวจสอบว่ามี Key ครบไหม
 if (!publicVapidKey || !privateVapidKey) {
-    console.error("❌ ข้อผิดพลาด: ไม่พบ VAPID Keys กรุณาตรวจสอบ Environment Variables ใน Render");
+    console.error("❌ ERROR: ไม่พบ VAPID Keys กรุณาตรวจสอบ Environment Variables ใน Render");
 } else {
-    console.log("✅ พบ VAPID Keys แล้ว พร้อมใช้งาน");
+    console.log("✅ VAPID Keys Loaded Ready.");
+    // ตั้งค่า Web Push
+    webpush.setVapidDetails(
+        mailtoEmail,
+        publicVapidKey,
+        privateVapidKey
+    );
 }
-
-// ตั้งค่า Web Push
-webpush.setVapidDetails(
-    mailtoEmail,
-    publicVapidKey,
-    privateVapidKey
-);
 
 // ตัวแปรเก็บข้อมูล Subscription (ใน RAM)
 let subscriptions = [];
 
-// Route 1: หน้าแรก (เอาไว้เช็คสถานะ Server)
+// --- Routes ---
+
+// เช็คสถานะ Server
 app.get('/', (req, res) => {
-    res.send('Makro Push Server is Running & Connected to Keys!');
+    res.send('Makro Push Server is Running (Fixed Version)!');
 });
 
-// Route 2: รับการลงทะเบียน (Subscribe)
+// รับการลงทะเบียน (Subscribe)
 app.post('/subscribe', (req, res) => {
     const subscription = req.body;
     subscriptions.push(subscription);
-    console.log(`➕ ผู้ใช้ใหม่ลงทะเบียน (รวม: ${subscriptions.length} คน)`);
+    console.log(`➕ ผู้ใช้ใหม่ลงทะเบียน (Total: ${subscriptions.length})`);
     res.status(201).json({});
 });
 
-// Route 3: สั่งยิงแจ้งเตือน (Push)
+// ส่งแจ้งเตือน (Trigger Push)
 app.post('/trigger-push', (req, res) => {
     const { message, branch } = req.body;
 
-    // สร้างข้อมูลแจ้งเตือน
+    // สร้างข้อมูลแจ้งเตือน (พร้อม Deep Link ?mode=apply)
     const notificationPayload = JSON.stringify({
         title: `⚡ งานด่วน! สาขา ${branch || 'ไม่ระบุ'}`,
         body: message || 'มีตำแหน่งงานว่าง รีบสมัครด่วน!',
         icon: 'https://cdn-icons-png.flaticon.com/512/3135/3135715.png',
-        // ส่วนที่เพิ่มใหม่: แนบลิ้งค์พร้อมรหัส ?mode=apply
         data: {
-            url: '/?mode=apply' 
+            url: '/?mode=apply' // รหัสลับสำหรับเปิดหน้าสมัครงาน
         }
     });
 
     console.log(`🚀 กำลังส่งแจ้งเตือนไปยัง ${subscriptions.length} คน...`);
 
-    Promise.all(subscriptions.map(sub => 
-        webpush.sendNotification(sub, notificationPayload)
-            .catch(err => {
-                console.error("ส่งไม่ผ่าน:", err.statusCode);
-                return null; 
-            })
-    ))
-    .then(() => res.json({ success: true, count: subscriptions.length }))
-    .catch(err => res.status(500).json({ error: 'Failed to send notifications' }));
-});
-
-    console.log(`🚀 กำลังส่งแจ้งเตือนไปยัง ${subscriptions.length} คน...`);
-
-    Promise.all(subscriptions.map(sub => 
+    Promise.all(subscriptions.map(sub =>
         webpush.sendNotification(sub, notificationPayload)
             .catch(err => {
                 console.error("ส่งไม่ผ่าน 1 คน (อาจจะปิด Browser ไปแล้ว):", err.statusCode);
-                return null; 
+                return null;
             })
     ))
-    .then(() => res.json({ success: true, count: subscriptions.length }))
+    .then(() => {
+        console.log("✅ ส่ง Broadcast สำเร็จ");
+        res.json({ success: true, count: subscriptions.length });
+    })
     .catch(err => {
-        console.error("เกิดข้อผิดพลาดร้ายแรง:", err);
+        console.error("❌ เกิดข้อผิดพลาด:", err);
         res.status(500).json({ error: 'Failed to send notifications' });
     });
 });
