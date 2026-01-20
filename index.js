@@ -1,4 +1,4 @@
-// index.js ฉบับแก้ไขสมบูรณ์ (20 Jan 2026)
+// index.js ฉบับแก้ไขสมบูรณ์ (Link to apply.html)
 
 // 1. โหลด Environment Variables
 require('dotenv').config();
@@ -39,7 +39,7 @@ let subscriptions = [];
 
 // เช็คสถานะ Server
 app.get('/', (req, res) => {
-    res.send('Makro Push Server is Running (Fixed Version)!');
+    res.send('Makro Push Server is Running (Deep Link to apply.html Ready)!');
 });
 
 // รับการลงทะเบียน (Subscribe)
@@ -54,13 +54,14 @@ app.post('/subscribe', (req, res) => {
 app.post('/trigger-push', (req, res) => {
     const { message, branch } = req.body;
 
+    // สร้างข้อมูลแจ้งเตือน (พร้อม Deep Link ไปยัง apply.html)
     const notificationPayload = JSON.stringify({
         title: `⚡ งานด่วน! สาขา ${branch || 'ไม่ระบุ'}`,
-        body: message || 'มีตำแหน่งงานว่าง รีบสมัครด่วน!',
+        body: message || 'ตำแหน่งว่าง! แตะเพื่อดูรายละเอียดและสมัครทันที',
         icon: 'https://cdn-icons-png.flaticon.com/512/3135/3135715.png',
         data: {
-            // ⭐ แก้ตรงนี้: ใส่ URL เต็มๆ ของเว็บคุณลงไปเลย
-            url: 'https://oonllos.github.io/Pick-Pack/?mode=apply' 
+            // ⭐ ลิ้งค์ตรงไปยังหน้าสมัครงาน apply.html
+            url: 'https://oonllos.github.io/Pick-Pack/apply.html' 
         }
     });
 
