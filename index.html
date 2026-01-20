@@ -1,0 +1,375 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Vacancy Radius Matcher (Simulation)</title>
+    <!-- Tailwind CSS for Streamlit-like styling -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Leaflet CSS & JS for Map -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <!-- Font Awesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" />
+
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+        
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar { width: 8px; height: 8px; }
+        ::-webkit-scrollbar-track { background: #f1f1f1; }
+        ::-webkit-scrollbar-thumb { background: #888; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #555; }
+
+        /* Streamlit-like Sidebar */
+        .sidebar { background-color: #f8f9fa; border-right: 1px solid #ddd; }
+        
+        /* Streamlit-like Toast */
+        .toast {
+            visibility: hidden;
+            min-width: 250px;
+            background-color: #333;
+            color: #fff;
+            text-align: center;
+            border-radius: 8px;
+            padding: 16px;
+            position: fixed;
+            z-index: 9999;
+            right: 30px;
+            bottom: 30px;
+            font-size: 14px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            opacity: 0;
+            transition: opacity 0.5s, bottom 0.5s;
+        }
+        .toast.show {
+            visibility: visible;
+            opacity: 1;
+            bottom: 50px;
+        }
+
+        /* Map Container */
+        #map { height: 500px; width: 100%; border-radius: 0.5rem; z-index: 1; }
+    </style>
+</head>
+<body class="text-gray-800 bg-white h-screen flex flex-col md:flex-row overflow-hidden">
+
+    <!-- Sidebar -->
+    <aside class="sidebar w-full md:w-80 flex-shrink-0 h-full overflow-y-auto p-6 flex flex-col gap-6 relative z-20">
+        <div>
+            <div class="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">การตั้งค่า</div>
+            <h2 class="text-xl font-bold mb-4">🏢 ตั้งค่าสาขา</h2>
+            
+            <div class="mb-4">
+                <label class="block text-sm font-medium text-gray-700 mb-1">ชื่อสาขา</label>
+                <input type="text" value="สาขา สยามพารากอน" class="w-full p-2 border border-gray-300 rounded focus:ring-2 focus:ring-red-500 focus:outline-none text-sm">
+            </div>
+
+            <div class="mb-4">
+                <label class="block text-sm font-medium text-gray-700 mb-1">พิกัดสาขา (Lat/Lon)</label>
+                <div class="flex gap-2">
+                    <input type="number" value="13.7462" disabled class="w-1/2 p-2 bg-gray-100 border border-gray-300 rounded text-sm text-gray-500">
+                    <input type="number" value="100.5340" disabled class="w-1/2 p-2 bg-gray-100 border border-gray-300 rounded text-sm text-gray-500">
+                </div>
+                <p class="text-xs text-gray-400 mt-1">* ล็อคพิกัดสำหรับ Demo</p>
+            </div>
+
+            <div class="mb-6">
+                <div class="flex justify-between items-center mb-1">
+                    <label class="block text-sm font-medium text-gray-700">รัศมีค้นหา (กม.)</label>
+                    <span id="radiusVal" class="text-sm font-bold text-red-600">3.0</span>
+                </div>
+                <input type="range" id="radiusSlider" min="0.5" max="8.0" step="0.1" value="3.0" 
+                    class="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-red-600">
+                <div class="flex justify-between text-xs text-gray-400 mt-1">
+                    <span>0.5 กม.</span>
+                    <span>8.0 กม.</span>
+                </div>
+            </div>
+
+            <hr class="border-gray-300 mb-4">
+
+            <button onclick="regenerateData()" class="w-full py-2 px-4 border border-gray-300 rounded text-sm hover:border-red-500 hover:text-red-500 transition-colors">
+                🔄 สุ่มข้อมูลผู้ใช้ใหม่
+            </button>
+        </div>
+        
+        <div class="mt-auto text-xs text-gray-400">
+            จำลองหน้าจอ Streamlit App<br>
+            โดย Gemini
+        </div>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="flex-1 h-full overflow-y-auto p-4 md:p-8 relative z-10">
+        <div class="max-w-6xl mx-auto">
+            
+            <!-- Header -->
+            <div class="mb-8">
+                <h1 class="text-3xl font-bold text-gray-900 mb-2">📍 ระบบจับคู่ตำแหน่งงานว่างตามพิกัด</h1>
+                <p class="text-gray-600">เครื่องมือทดสอบการค้นหาผู้ลงทะเบียนที่พักอาศัยอยู่ใกล้กับสาขาเพื่อส่ง Notification</p>
+            </div>
+
+            <!-- Content Grid -->
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                
+                <!-- Left: Map -->
+                <div class="lg:col-span-2">
+                    <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
+                        <h3 class="text-lg font-semibold mb-3">🗺️ แผนที่แสดงผล</h3>
+                        <div id="map"></div>
+                        <div class="mt-3 flex gap-4 text-sm text-gray-600">
+                            <div class="flex items-center gap-1"><span class="w-3 h-3 rounded-full bg-red-600 inline-block"></span> สาขา</div>
+                            <div class="flex items-center gap-1"><span class="w-3 h-3 rounded-full bg-green-500 inline-block"></span> ในรัศมี (แจ้งเตือน)</div>
+                            <div class="flex items-center gap-1"><span class="w-3 h-3 rounded-full bg-gray-400 inline-block"></span> นอกรัศมี</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Right: Results & Actions -->
+                <div class="lg:col-span-1">
+                    <!-- Metrics Card -->
+                    <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-6">
+                        <h3 class="text-sm font-medium text-gray-500 uppercase">ผู้ลงทะเบียนในรัศมี</h3>
+                        <div class="mt-2 flex items-baseline">
+                            <span id="matchCount" class="text-4xl font-extrabold text-green-600">0</span>
+                            <span class="ml-2 text-sm text-gray-500">คน (จาก 50 คน)</span>
+                        </div>
+                    </div>
+
+                    <!-- List Card -->
+                    <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-0 overflow-hidden flex flex-col" style="max-height: 400px;">
+                        <div class="p-4 border-b border-gray-200 bg-gray-50">
+                            <h3 class="font-semibold">รายชื่อผู้ที่ได้รับแจ้งเตือน</h3>
+                        </div>
+                        <div class="overflow-y-auto flex-1 p-0" id="userListContainer">
+                            <table class="min-w-full divide-y divide-gray-200">
+                                <thead class="bg-gray-50 sticky top-0">
+                                    <tr>
+                                        <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ชื่อ</th>
+                                        <th class="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">ระยะทาง</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="userTableBody" class="bg-white divide-y divide-gray-200 text-sm">
+                                    <!-- Rows will be injected here -->
+                                </tbody>
+                            </table>
+                        </div>
+                        <div class="p-4 border-t border-gray-200 bg-white">
+                            <button onclick="sendNotification()" class="w-full bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded shadow transition-colors flex items-center justify-center gap-2">
+                                <i class="fas fa-paper-plane"></i> ส่ง Notification
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Raw Data Preview (Mimic Streamlit Expander) -->
+            <div class="mt-8 border rounded-lg border-gray-200 overflow-hidden">
+                <button onclick="toggleExpander()" class="w-full px-4 py-2 bg-gray-50 text-left text-sm font-medium text-gray-600 hover:bg-gray-100 flex justify-between items-center">
+                    <span>ดูข้อมูลดิบ (Raw Data)</span>
+                    <i id="expanderIcon" class="fas fa-chevron-down transition-transform"></i>
+                </button>
+                <div id="expanderContent" class="hidden p-4 bg-gray-50 text-xs font-mono overflow-x-auto">
+                    <p class="text-gray-500 mb-2">Displaying first 5 records:</p>
+                    <div id="rawDataDisplay"></div>
+                </div>
+            </div>
+
+        </div>
+    </main>
+
+    <!-- Toast Notification -->
+    <div id="toast" class="toast">
+        <div class="flex items-center gap-3">
+            <i class="fas fa-check-circle text-green-400 text-xl"></i>
+            <div class="text-left">
+                <div class="font-bold">ส่งสำเร็จ!</div>
+                <div id="toastMessage" class="text-sm text-gray-300">แจ้งเตือนไปยัง 0 ท่าน</div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // --- Constants & State ---
+        const CENTER_LAT = 13.7462;
+        const CENTER_LON = 100.5340;
+        let radiusKm = 3.0;
+        let users = [];
+        let map, branchMarker, radiusCircle, userLayerGroup;
+
+        // --- Mock Data Generation ---
+        function generateUsers(count = 50) {
+            const names = ["สมชาย", "วิชัย", "กานดา", "มานี", "ปิติ", "ชูใจ", "วีระ", "สุดา", "สมศักดิ์", "อารี"];
+            const newData = [];
+            for (let i = 0; i < count; i++) {
+                // Generate random point around center (~ +/- 5-6km range)
+                const lat = CENTER_LAT + (Math.random() - 0.5) * 0.1; 
+                const lon = CENTER_LON + (Math.random() - 0.5) * 0.1;
+                
+                newData.push({
+                    id: `U${(i+1).toString().padStart(3, '0')}`,
+                    name: `คุณ${names[Math.floor(Math.random() * names.length)]} ${i+1}`,
+                    lat: lat,
+                    lon: lon
+                });
+            }
+            return newData;
+        }
+
+        // --- Distance Calculation (Haversine) ---
+        function getDistanceFromLatLonInKm(lat1, lon1, lat2, lon2) {
+            const R = 6371; // Radius of the earth in km
+            const dLat = deg2rad(lat2 - lat1);
+            const dLon = deg2rad(lon2 - lon1);
+            const a = 
+                Math.sin(dLat/2) * Math.sin(dLat/2) +
+                Math.cos(deg2rad(lat1)) * Math.cos(deg2rad(lat2)) * Math.sin(dLon/2) * Math.sin(dLon/2); 
+            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a)); 
+            const d = R * c; // Distance in km
+            return d;
+        }
+
+        function deg2rad(deg) {
+            return deg * (Math.PI/180);
+        }
+
+        // --- Logic Update ---
+        function updateDashboard() {
+            // 1. Update Slider Text
+            document.getElementById('radiusVal').textContent = radiusKm.toFixed(1);
+
+            // 2. Filter Users
+            let matchedCount = 0;
+            const tableBody = document.getElementById('userTableBody');
+            tableBody.innerHTML = '';
+            
+            // Clear old markers
+            userLayerGroup.clearLayers();
+
+            const sortedUsers = users.map(u => {
+                const dist = getDistanceFromLatLonInKm(CENTER_LAT, CENTER_LON, u.lat, u.lon);
+                return { ...u, distance: dist };
+            }).sort((a, b) => a.distance - b.distance);
+
+            // Re-draw Map Markers & Table
+            sortedUsers.forEach(u => {
+                const isMatch = u.distance <= radiusKm;
+                
+                // Add Marker to Map
+                const color = isMatch ? '#22c55e' : '#9ca3af'; // Green or Gray
+                const markerHtml = `<div style="background-color: ${color}; width: 10px; height: 10px; border-radius: 50%; border: 1px solid white; box-shadow: 0 1px 2px rgba(0,0,0,0.3);"></div>`;
+                
+                const customIcon = L.divIcon({
+                    className: 'custom-div-icon',
+                    html: markerHtml,
+                    iconSize: [12, 12],
+                    iconAnchor: [6, 6]
+                });
+
+                L.marker([u.lat, u.lon], { icon: customIcon })
+                    .bindPopup(`<b>${u.name}</b><br>ระยะห่าง: ${u.distance.toFixed(2)} กม.`)
+                    .addTo(userLayerGroup);
+
+                // Add to Table if matched
+                if (isMatch) {
+                    matchedCount++;
+                    const row = `
+                        <tr>
+                            <td class="px-4 py-2 whitespace-nowrap text-gray-900">${u.name}</td>
+                            <td class="px-4 py-2 whitespace-nowrap text-right text-gray-500 font-mono">${u.distance.toFixed(2)} กม.</td>
+                        </tr>
+                    `;
+                    tableBody.innerHTML += row;
+                }
+            });
+
+            // 3. Update Metrics
+            document.getElementById('matchCount').textContent = matchedCount;
+            document.getElementById('toastMessage').textContent = `แจ้งเตือนไปยัง ${matchedCount} ท่าน`;
+
+            // 4. Update Map Radius Circle
+            if (radiusCircle) {
+                radiusCircle.setRadius(radiusKm * 1000); // meters
+            }
+        }
+
+        // --- Actions ---
+        function regenerateData() {
+            users = generateUsers(50);
+            renderRawData();
+            updateDashboard();
+        }
+
+        function sendNotification() {
+            const toast = document.getElementById("toast");
+            toast.className = "toast show";
+            setTimeout(function(){ toast.className = toast.className.replace("show", ""); }, 3000);
+        }
+
+        function toggleExpander() {
+            const content = document.getElementById('expanderContent');
+            const icon = document.getElementById('expanderIcon');
+            if (content.classList.contains('hidden')) {
+                content.classList.remove('hidden');
+                icon.style.transform = 'rotate(180deg)';
+            } else {
+                content.classList.add('hidden');
+                icon.style.transform = 'rotate(0deg)';
+            }
+        }
+
+        function renderRawData() {
+            const container = document.getElementById('rawDataDisplay');
+            const sample = users.slice(0, 5);
+            let html = '<table class="w-full text-left"><thead><tr><th>ID</th><th>Name</th><th>Lat</th><th>Lon</th></tr></thead><tbody>';
+            sample.forEach(u => {
+                html += `<tr><td>${u.id}</td><td>${u.name}</td><td>${u.lat.toFixed(4)}</td><td>${u.lon.toFixed(4)}</td></tr>`;
+            });
+            html += '</tbody></table>';
+            container.innerHTML = html;
+        }
+
+        // --- Init ---
+        window.onload = function() {
+            // Init Map
+            map = L.map('map').setView([CENTER_LAT, CENTER_LON], 12);
+            L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+                attribution: '&copy; OpenStreetMap &copy; CARTO',
+                maxZoom: 19
+            }).addTo(map);
+
+            // Add Branch Marker
+            const branchIcon = L.divIcon({
+                className: 'branch-icon',
+                html: '<div style="background-color: #ef4444; width: 16px; height: 16px; border-radius: 50%; border: 2px solid white; box-shadow: 0 2px 4px rgba(0,0,0,0.3);"></div>',
+                iconSize: [20, 20],
+                iconAnchor: [10, 10]
+            });
+            branchMarker = L.marker([CENTER_LAT, CENTER_LON], { icon: branchIcon }).addTo(map)
+                .bindPopup("<b>สาขา สยามพารากอน</b><br>จุดศูนย์กลาง").openPopup();
+
+            // Add Radius Circle
+            radiusCircle = L.circle([CENTER_LAT, CENTER_LON], {
+                color: 'red',
+                fillColor: '#f03',
+                fillOpacity: 0.1,
+                radius: radiusKm * 1000
+            }).addTo(map);
+
+            // Layer Group for Users
+            userLayerGroup = L.layerGroup().addTo(map);
+
+            // Init Data
+            regenerateData();
+
+            // Event Listeners
+            const slider = document.getElementById('radiusSlider');
+            slider.addEventListener('input', function(e) {
+                radiusKm = parseFloat(e.target.value);
+                updateDashboard();
+            });
+        };
+    </script>
+</body>
+</html>
