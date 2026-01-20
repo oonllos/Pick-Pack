@@ -1,90 +1,293 @@
-// index.js - ฉบับสมบูรณ์ (Deep Link Support)
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Vacancy Radius Matcher (Deep Link)</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" />
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+        #map { height: 100%; width: 100%; border-radius: 0.5rem; z-index: 1; min-height: 400px; }
+        
+        /* Toast Notification */
+        .toast { visibility: hidden; min-width: 250px; background-color: #333; color: #fff; text-align: center; border-radius: 8px; padding: 16px; position: fixed; z-index: 9999; right: 30px; bottom: 30px; opacity: 0; transition: opacity 0.5s, bottom 0.5s; }
+        .toast.show { visibility: visible; opacity: 1; bottom: 50px; }
 
-require('dotenv').config(); // โหลด Environment Variables
+        /* Mockup Animation */
+        @keyframes slideDown { from { transform: translateY(-100%); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+        .notification-slide { animation: slideDown 0.5s cubic-bezier(0.4, 0, 0.2, 1) forwards; }
+    </style>
+</head>
+<body class="text-gray-800 bg-gray-100 h-screen flex flex-col md:flex-row overflow-hidden">
 
-const express = require('express');
-const webpush = require('web-push');
-const bodyParser = require('body-parser');
-const cors = require('cors');
+    <aside class="w-full md:w-80 bg-white border-r border-gray-200 flex-shrink-0 h-full overflow-y-auto p-6 flex flex-col gap-4 z-20 shadow-lg">
+        <h1 class="text-xl font-bold text-gray-800 flex items-center gap-2">
+            <i class="fas fa-map-marked-alt text-red-600"></i> Makro Job Matcher
+        </h1>
 
-const app = express();
+        <div class="bg-yellow-50 border border-yellow-200 rounded p-3">
+            <label class="font-bold text-xs text-yellow-800 uppercase mb-1 block">1. ตั้งค่า Server (Render)</label>
+            <input type="text" id="serverUrlInput" placeholder="https://xxx.onrender.com" class="w-full p-2 border rounded text-xs bg-white focus:outline-none focus:ring-2 focus:ring-yellow-400">
+            <p class="text-[10px] text-gray-500 mt-1">*ใส่ URL จาก Render แล้วกด Enter เพื่อบันทึก</p>
+        </div>
 
-// อนุญาตให้ GitHub Pages เรียกใช้งานได้
-app.use(cors());
-app.use(bodyParser.json());
+        <div class="bg-blue-50 border border-blue-200 rounded p-4">
+            <label class="font-bold text-xs text-blue-800 uppercase mb-1 block">2. ผู้หางาน (Simulation)</label>
+            <input type="tel" id="userPhoneInput" value="089-668-9687" class="w-full p-2 border border-blue-200 rounded text-sm mb-2 text-center font-bold font-mono text-gray-700">
+            
+            <button onclick="subscribeUser()" id="btnSubscribe" class="w-full bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold py-2 px-4 rounded shadow transition-colors flex items-center justify-center gap-2">
+                🔔 กดเพื่อเปิดรับงาน (Subscribe)
+            </button>
+            <div id="subStatus" class="text-xs text-center mt-2 text-gray-400">สถานะ: ยังไม่ได้เชื่อมต่อ</div>
+        </div>
 
-// --- 1. การตั้งค่า VAPID KEYS ---
-const publicVapidKey = process.env.PUBLIC_VAPID_KEY;
-const privateVapidKey = process.env.PRIVATE_VAPID_KEY;
-const mailtoEmail = process.env.MAILTO_EMAIL || 'mailto:oonllos@gmail.com';
+        <div class="flex-1 min-h-[100px]">
+            <div class="text-xs font-semibold text-gray-500 uppercase mb-2">เลือกสาขาที่ต้องการคน</div>
+            <div id="branchList" class="h-full max-h-40 overflow-y-auto border border-gray-300 rounded bg-white p-2 space-y-2 text-sm"></div>
+        </div>
 
-// ตรวจสอบค่า Key
-if (!publicVapidKey || !privateVapidKey) {
-    console.error("❌ ERROR: ไม่พบ VAPID Keys กรุณาเช็ค Environment Variables ใน Render");
-} else {
-    console.log("✅ VAPID Keys Loaded.");
-}
+        <div class="mt-auto">
+            <button onclick="triggerPush()" class="w-full bg-red-600 hover:bg-red-700 text-white font-bold py-3 px-4 rounded shadow-lg transition-transform hover:scale-[1.02] flex items-center justify-center gap-2">
+                🚀 3. ยิงแคมเปญแจ้งเตือน
+            </button>
+        </div>
+    </aside>
 
-webpush.setVapidDetails(
-    mailtoEmail,
-    publicVapidKey,
-    privateVapidKey
-);
+    <main class="flex-1 h-full relative z-10 p-4">
+        <div class="bg-white rounded-lg shadow-md border border-gray-200 p-1 h-full flex flex-col">
+            <div id="map" class="flex-1 rounded"></div>
+            <div class="p-2 text-xs text-gray-400 font-mono" id="logConsole">System Ready...</div>
+        </div>
+    </main>
 
-// ตัวแปรเก็บ Subscription (ใน RAM)
-let subscriptions = [];
+    <div id="phoneMockup" class="hidden fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4 backdrop-blur-sm transition-opacity">
+        <div class="bg-white rounded-[2.5rem] border-[10px] border-gray-900 w-[340px] h-[680px] overflow-hidden relative shadow-2xl flex flex-col">
+            <div class="absolute top-0 left-1/2 transform -translate-x-1/2 w-28 h-7 bg-gray-900 rounded-b-xl z-30"></div>
+            
+            <div class="bg-white h-10 w-full flex justify-between items-center px-6 pt-2 text-[12px] font-bold text-gray-900 z-20">
+                <span>10:45</span>
+                <div class="flex gap-1"><i class="fas fa-signal"></i><i class="fas fa-wifi"></i><i class="fas fa-battery-full"></i></div>
+            </div>
 
-// --- 2. Routes ---
+            <div class="flex-1 bg-gray-100 pt-10 px-4 relative flex flex-col overflow-y-auto pb-10">
+                
+                <div id="notificationCard" class="w-full bg-white p-4 rounded-2xl shadow-lg border border-gray-100 mb-4 cursor-pointer hidden" onclick="openJobDetailMode()">
+                    <div class="flex items-start gap-3">
+                        <div class="bg-red-600 w-10 h-10 rounded-xl flex items-center justify-center text-white"><i class="fas fa-store"></i></div>
+                        <div>
+                            <h4 class="font-bold text-sm">Makro Job Alert</h4>
+                            <p class="text-xs text-gray-600 mt-1">มีงานด่วน! กดเพื่อดูรายละเอียด</p>
+                        </div>
+                    </div>
+                </div>
 
-// เช็คสถานะ Server
-app.get('/', (req, res) => {
-    res.send('Makro Push Server is Running (Deep Link Ready)!');
-});
+                <div id="jobDetailView" class="hidden bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden flex-col h-full animate-fade-in flex-1">
+                    <div class="h-40 bg-red-600 relative flex items-end p-5">
+                        <div class="text-white">
+                            <div class="bg-white/20 backdrop-blur inline-block px-2 py-1 rounded text-[10px] mb-2">Part-time</div>
+                            <h2 class="font-bold text-2xl leading-none">พนักงาน<br>จัดเรียงสินค้า</h2>
+                        </div>
+                    </div>
+                    <div class="p-5 flex-1 flex flex-col gap-4">
+                        <div class="flex justify-between items-start border-b pb-4">
+                            <div>
+                                <div class="text-xs text-gray-500 uppercase font-semibold">สาขาที่เปิดรับ</div>
+                                <div id="detailBranchName" class="text-lg font-bold text-gray-800">Makro Sathorn</div>
+                            </div>
+                            <div class="text-right">
+                                <div class="text-xs text-gray-500 uppercase font-semibold">ค่าตอบแทน</div>
+                                <div class="text-lg font-bold text-green-600">500บ./วัน</div>
+                            </div>
+                        </div>
 
-// รับการลงทะเบียน (Subscribe)
-app.post('/subscribe', (req, res) => {
-    const subscription = req.body;
-    subscriptions.push(subscription);
-    console.log(`➕ ผู้ใช้ใหม่ลงทะเบียน (Total: ${subscriptions.length})`);
-    res.status(201).json({});
-});
+                        <div class="space-y-2 text-sm text-gray-600">
+                            <p><i class="fas fa-clock w-5 text-center"></i> 08:00 - 17:00 น.</p>
+                            <p><i class="fas fa-calendar w-5 text-center"></i> เริ่มงานทันที</p>
+                            <p><i class="fas fa-map-marker-alt w-5 text-center"></i> ห่างจากคุณ 0.8 กม.</p>
+                        </div>
 
-// ยิงแจ้งเตือน (Trigger Push)
-app.post('/trigger-push', (req, res) => {
-    const { message, branch } = req.body;
+                        <div class="mt-auto space-y-3 pt-4">
+                             <button onclick="closePhoneMockup()" class="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-3 rounded-xl shadow-lg transform active:scale-95 transition-transform flex items-center justify-center gap-2">
+                                <i class="fas fa-check-circle"></i> ยืนยันสมัครงาน
+                             </button>
+                             <button onclick="closePhoneMockup()" class="w-full bg-white border border-gray-300 text-gray-500 font-bold py-3 rounded-xl hover:bg-gray-50">
+                                ปิดหน้าต่าง
+                             </button>
+                        </div>
+                    </div>
+                </div>
 
-    // สร้างข้อมูลแจ้งเตือนพร้อมลิ้งค์ (Deep Link)
-    const notificationPayload = JSON.stringify({
-        title: `⚡ งานด่วน! สาขา ${branch || 'ไม่ระบุ'}`,
-        body: message || 'มีตำแหน่งงานว่าง รีบสมัครด่วน!',
-        icon: 'https://cdn-icons-png.flaticon.com/512/3135/3135715.png',
-        data: {
-            url: '/?mode=apply' // รหัสลับสำหรับเปิดหน้าสมัครงาน
+            </div>
+            <div class="absolute bottom-1 left-1/2 transform -translate-x-1/2 w-32 h-1 bg-gray-400 rounded-full mb-2"></div>
+        </div>
+    </div>
+
+    <div id="toast" class="toast">...</div>
+
+    <script>
+        // --- 1. CONFIGURATION ---
+        const publicVapidKey = 'BADoIRIstMKN9nMxO2GapvbSSssA84-1ByEFexro6syeZScJoajrGAXDPA_atNhl0SmxfeazS-ZPUGZH3DaHvnY';
+        
+        // ข้อมูลสาขาสำหรับ Map
+        const MAKRO_BRANCHES = [
+            { id: 'MK01', name: 'Makro Sathorn', lat: 13.7025, lon: 100.5431 },
+            { id: 'MK02', name: 'Makro Ladprao', lat: 13.7663, lon: 100.6409 },
+            { id: 'MK03', name: 'Makro Samsen', lat: 13.7884, lon: 100.5135 }
+        ];
+        let map, branchLayer;
+
+        // --- 2. INITIALIZATION ---
+        window.onload = function() {
+            // โหลด URL ที่เคยบันทึกไว้
+            const savedUrl = localStorage.getItem('pushServerUrl');
+            if(savedUrl) document.getElementById('serverUrlInput').value = savedUrl;
+
+            // เริ่มต้นแผนที่
+            initMap();
+            
+            // --- DEEP LINK CHECK (ส่วนสำคัญ) ---
+            // เช็คว่า URL มี ?mode=apply หรือไม่ (ถ้ามีแปลว่ากดมาจาก Notification)
+            const urlParams = new URLSearchParams(window.location.search);
+            if (urlParams.get('mode') === 'apply') {
+                log("🔔 ตรวจพบการกดแจ้งเตือน! กำลังเปิดหน้าสมัครงาน...");
+                // รอเล็กน้อยให้โหลด assets เสร็จแล้วเด้งหน้าสมัครงาน
+                setTimeout(() => openJobDetailMode(), 500);
+            } else {
+                log("System Ready. Waiting for user action.");
+            }
+        };
+
+        // --- 3. UI FUNCTIONS ---
+        function initMap() {
+            map = L.map('map').setView([13.75, 100.55], 11);
+            L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png').addTo(map);
+            branchLayer = L.layerGroup().addTo(map);
+
+            const container = document.getElementById('branchList');
+            MAKRO_BRANCHES.forEach(b => {
+                L.marker([b.lat, b.lon]).addTo(branchLayer).bindPopup(b.name);
+                container.innerHTML += `
+                    <div class="flex items-center gap-2 p-1 hover:bg-gray-50 rounded cursor-pointer">
+                        <input type="checkbox" checked class="accent-red-600"> 
+                        <span>${b.name}</span>
+                    </div>`;
+            });
         }
-    });
 
-    console.log(`🚀 กำลังส่งแจ้งเตือนไปยัง ${subscriptions.length} คน...`);
+        // ฟังก์ชันเปิดหน้าสมัครงาน (Phone Mockup)
+        function openJobDetailMode() {
+            const phone = document.getElementById('phoneMockup');
+            const jobView = document.getElementById('jobDetailView');
+            const notifCard = document.getElementById('notificationCard');
+            
+            phone.classList.remove('hidden');    // โชว์โทรศัพท์
+            notifCard.classList.add('hidden');   // ซ่อน Banner เล็ก
+            jobView.classList.remove('hidden');  // โชว์หน้าสมัครงานเต็มจอ
+            
+            showToast("🔔 เข้าสู่หน้าสมัครงานสำเร็จ!");
+        }
 
-    Promise.all(subscriptions.map(sub => 
-        webpush.sendNotification(sub, notificationPayload)
-            .catch(err => {
-                // ถ้าส่งไม่ผ่าน (เช่น User ปิด Browser ไปแล้ว) ก็แค่ข้ามไป
-                console.error("ส่งไม่ผ่าน 1 คน:", err.statusCode);
-                return null; 
-            })
-    ))
-    .then(() => {
-        console.log("✅ ส่งสำเร็จทั้งหมด");
-        res.json({ success: true, count: subscriptions.length });
-    })
-    .catch(err => {
-        console.error("❌ เกิดข้อผิดพลาด:", err);
-        res.status(500).json({ error: 'Failed to send notifications' });
-    });
-});
+        function closePhoneMockup() {
+            document.getElementById('phoneMockup').classList.add('hidden');
+            // ล้าง URL ไม่ให้ refresh แล้วเด้งซ้ำ
+            const newUrl = window.location.pathname;
+            window.history.replaceState({}, document.title, newUrl);
+        }
 
-// --- 3. Start Server ---
-const port = process.env.PORT || 5000;
-app.listen(port, () => {
-    console.log(`Server started on port ${port}`);
-});
+        // --- 4. BACKEND CONNECTION ---
+        function getServerUrl() {
+            const url = document.getElementById('serverUrlInput').value.replace(/\/$/, "");
+            if(!url) { alert('กรุณาใส่ Server URL (จาก Render) ที่ช่องข้อ 1 ก่อนครับ'); return null; }
+            localStorage.setItem('pushServerUrl', url);
+            return url;
+        }
+
+        function urlBase64ToUint8Array(base64String) {
+            const padding = '='.repeat((4 - base64String.length % 4) % 4);
+            const base64 = (base64String + padding).replace(/\-/g, '+').replace(/_/g, '/');
+            const rawData = window.atob(base64);
+            const outputArray = new Uint8Array(rawData.length);
+            for (let i = 0; i < rawData.length; ++i) outputArray[i] = rawData.charCodeAt(i);
+            return outputArray;
+        }
+
+        async function subscribeUser() {
+            const url = getServerUrl();
+            if(!url) return;
+            const btn = document.getElementById('btnSubscribe');
+            const status = document.getElementById('subStatus');
+
+            if ('serviceWorker' in navigator) {
+                try {
+                    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> กำลังเชื่อมต่อ...';
+                    
+                    // Register Service Worker
+                    const register = await navigator.serviceWorker.register('worker.js');
+                    log("Service Worker Registered");
+
+                    // Subscribe Push
+                    const subscription = await register.pushManager.subscribe({
+                        userVisibleOnly: true,
+                        applicationServerKey: urlBase64ToUint8Array(publicVapidKey)
+                    });
+
+                    // Send to Server
+                    await fetch(`${url}/subscribe`, {
+                        method: 'POST',
+                        body: JSON.stringify(subscription),
+                        headers: {'content-type': 'application/json'}
+                    });
+
+                    status.textContent = "สถานะ: ✅ เชื่อมต่อแล้ว (Ready)";
+                    status.className = "text-xs text-center mt-2 text-green-600 font-bold";
+                    btn.innerHTML = '✅ เชื่อมต่อเรียบร้อย';
+                    btn.classList.replace('bg-blue-600', 'bg-green-600');
+                    showToast("เชื่อมต่อสำเร็จ พร้อมรับงาน!");
+
+                } catch (err) {
+                    console.error(err);
+                    log("Error: " + err.message);
+                    btn.innerHTML = '❌ เชื่อมต่อล้มเหลว';
+                    alert("เชื่อมต่อไม่ได้: " + err.message);
+                }
+            } else {
+                alert("Browser ไม่รองรับ Push Notification");
+            }
+        }
+
+        async function triggerPush() {
+            const url = getServerUrl();
+            if(!url) return;
+
+            try {
+                log("Sending trigger to server...");
+                await fetch(`${url}/trigger-push`, {
+                    method: 'POST',
+                    body: JSON.stringify({ branch: 'Makro Sathorn', message: 'มีงานด่วน! กดเพื่อดูรายละเอียด' }),
+                    headers: {'content-type': 'application/json'}
+                });
+                log("Trigger sent!");
+                showToast("🚀 ส่งคำสั่งแล้ว! รอดูที่มือถือ...");
+            } catch (err) {
+                log("Trigger Error: " + err.message);
+                alert("ส่งคำสั่งไม่ผ่าน เช็ค Server URL");
+            }
+        }
+
+        function log(msg) {
+            const c = document.getElementById('logConsole');
+            c.textContent = "> " + msg;
+        }
+
+        function showToast(msg) {
+            const t = document.getElementById('toast');
+            t.textContent = msg;
+            t.className = "toast show";
+            setTimeout(() => t.className = t.className.replace("show", ""), 3000);
+        }
+    </script>
+</body>
+</html>
