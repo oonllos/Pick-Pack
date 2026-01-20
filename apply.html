@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>สมัครงาน - Makro Job</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" />
+    <style>
+        body { font-family: 'Segoe UI', sans-serif; background-color: #f3f4f6; }
+        .safe-area { padding-bottom: env(safe-area-inset-bottom); }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col max-w-md mx-auto bg-white shadow-xl overflow-hidden">
+
+    <!-- Header Image -->
+    <div class="h-48 bg-red-600 relative flex items-end p-6">
+        <div class="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent"></div>
+        <div class="relative z-10 text-white w-full">
+            <span class="bg-white/20 backdrop-blur px-2 py-1 rounded text-[10px] font-bold uppercase tracking-wider mb-2 inline-block">Urgent Hiring</span>
+            <h1 class="text-3xl font-bold leading-tight">พนักงาน<br>จัดเรียงสินค้า</h1>
+        </div>
+        <button onclick="window.close()" class="absolute top-4 right-4 text-white/80 hover:text-white">
+            <i class="fas fa-times-circle text-2xl"></i>
+        </button>
+    </div>
+
+    <!-- Content -->
+    <div class="flex-1 p-6 flex flex-col gap-6 overflow-y-auto">
+        
+        <!-- Job Info -->
+        <div class="flex justify-between items-start border-b border-gray-100 pb-4">
+            <div>
+                <div class="text-xs text-gray-400 uppercase font-bold mb-1">สาขาที่เปิดรับ</div>
+                <div class="text-xl font-bold text-gray-800 flex items-center gap-2">
+                    <i class="fas fa-store text-red-600"></i> Makro Sathorn
+                </div>
+            </div>
+            <div class="text-right">
+                <div class="text-xs text-gray-400 uppercase font-bold mb-1">ค่าตอบแทน</div>
+                <div class="text-xl font-bold text-green-600">500฿<span class="text-xs text-gray-400 font-normal">/วัน</span></div>
+            </div>
+        </div>
+
+        <!-- Details List -->
+        <div class="space-y-4">
+            <div class="flex items-center gap-4 p-3 bg-gray-50 rounded-lg">
+                <div class="w-10 h-10 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center">
+                    <i class="fas fa-clock"></i>
+                </div>
+                <div>
+                    <div class="text-sm font-bold text-gray-700">เวลาทำงาน</div>
+                    <div class="text-xs text-gray-500">08:00 - 17:00 น. (พัก 1 ชม.)</div>
+                </div>
+            </div>
+            
+            <div class="flex items-center gap-4 p-3 bg-gray-50 rounded-lg">
+                <div class="w-10 h-10 rounded-full bg-purple-100 text-purple-600 flex items-center justify-center">
+                    <i class="fas fa-calendar-alt"></i>
+                </div>
+                <div>
+                    <div class="text-sm font-bold text-gray-700">เริ่มงาน</div>
+                    <div class="text-xs text-gray-500">ทันที (ระยะเวลา 5 วัน)</div>
+                </div>
+            </div>
+
+            <div class="flex items-center gap-4 p-3 bg-gray-50 rounded-lg">
+                <div class="w-10 h-10 rounded-full bg-orange-100 text-orange-600 flex items-center justify-center">
+                    <i class="fas fa-map-marker-alt"></i>
+                </div>
+                <div>
+                    <div class="text-sm font-bold text-gray-700">พิกัด</div>
+                    <div class="text-xs text-gray-500">ห่างจากคุณ 1.2 กม.</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Description -->
+        <div class="mt-2">
+            <h3 class="font-bold text-gray-800 mb-2">รายละเอียดงาน</h3>
+            <p class="text-sm text-gray-500 leading-relaxed">
+                ดูแลความเรียบร้อยของสินค้าบนชั้นวาง ตรวจสอบวันหมดอายุ และช่วยลูกค้าหาสินค้า ต้องการคนที่แข็งแรง ยกของหนักได้ และมีความรับผิดชอบ
+            </p>
+        </div>
+
+    </div>
+
+    <!-- Bottom Action Bar -->
+    <div class="p-4 border-t border-gray-100 bg-white safe-area sticky bottom-0">
+        <button id="btnApply" onclick="submitApplication()" class="w-full bg-red-600 hover:bg-red-700 text-white font-bold py-4 rounded-xl shadow-lg shadow-red-200 transform active:scale-95 transition-all flex items-center justify-center gap-2 text-lg">
+            <span>ยืนยันการสมัคร</span>
+            <i class="fas fa-arrow-right"></i>
+        </button>
+    </div>
+
+    <!-- Success Modal (Hidden) -->
+    <div id="successModal" class="hidden fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
+        <div class="bg-white rounded-2xl p-8 text-center max-w-xs w-full shadow-2xl transform scale-100 animate-bounce-in">
+            <div class="w-16 h-16 bg-green-100 text-green-500 rounded-full flex items-center justify-center mx-auto mb-4 text-3xl">
+                <i class="fas fa-check"></i>
+            </div>
+            <h3 class="text-xl font-bold text-gray-900 mb-2">สมัครสำเร็จ!</h3>
+            <p class="text-sm text-gray-500 mb-6">ระบบได้รับข้อมูลของคุณแล้ว เจ้าหน้าที่จะติดต่อกลับภายใน 15 นาที</p>
+            <a href="index.html" class="block w-full bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold py-3 rounded-xl transition-colors">
+                กลับหน้าหลัก
+            </a>
+        </div>
+    </div>
+
+    <script>
+        function submitApplication() {
+            const btn = document.getElementById('btnApply');
+            
+            // 1. เปลี่ยนปุ่มเป็นสถานะกำลังโหลด
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> กำลังบันทึก...';
+            btn.classList.add('opacity-75', 'cursor-not-allowed');
+            
+            // 2. จำลองการส่งข้อมูล (2 วินาที)
+            setTimeout(() => {
+                document.getElementById('successModal').classList.remove('hidden');
+            }, 1500);
+        }
+    </script>
+</body>
+</html>
+```
+
+---
+
+### 2. แก้ไข `index.js` (เปลี่ยนลิ้งค์)
+ให้ไปที่ GitHub ไฟล์ `index.js` แล้วแก้ตรง `data: { url: ... }` ให้ชี้ไปที่ไฟล์ใหม่ครับ
+
+```javascript
+// ... (ส่วนบนเหมือนเดิม) ...
+
+app.post('/trigger-push', (req, res) => {
+    const { message, branch } = req.body;
+
+    const notificationPayload = JSON.stringify({
+        title: `⚡ งานด่วน! สาขา ${branch || 'ไม่ระบุ'}`,
+        body: message || 'ตำแหน่งว่าง! แตะเพื่อดูรายละเอียดและสมัครทันที',
+        icon: 'https://cdn-icons-png.flaticon.com/512/3135/3135715.png',
+        data: {
+            // ⭐ แก้ตรงนี้: ให้ลิ้งค์ไปที่ไฟล์ apply.html โดยตรง
+            url: 'https://oonllos.github.io/Pick-Pack/apply.html' 
+        }
+    });
+
+// ... (ส่วนล่างเหมือนเดิม) ...
