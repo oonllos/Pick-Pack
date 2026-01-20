@@ -3,169 +3,60 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Makro Vacancy Matcher</title>
+    <title>Vacancy Radius Matcher (Real Push)</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" />
     <style>
         body { font-family: 'Segoe UI', sans-serif; }
-        #map { height: 400px; width: 100%; border-radius: 0.5rem; z-index: 1; }
+        ::-webkit-scrollbar { width: 8px; height: 8px; }
+        ::-webkit-scrollbar-thumb { background: #888; border-radius: 4px; }
+        #map { height: 500px; width: 100%; border-radius: 0.5rem; z-index: 1; }
+        
+        /* Mockup Animation */
+        @keyframes slideDown { from { transform: translateY(-100%); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+        .notification-slide { animation: slideDown 0.5s cubic-bezier(0.4, 0, 0.2, 1) forwards; }
+        
+        /* Toast */
         .toast { visibility: hidden; min-width: 250px; background-color: #333; color: #fff; text-align: center; border-radius: 8px; padding: 16px; position: fixed; z-index: 9999; right: 30px; bottom: 30px; opacity: 0; transition: opacity 0.5s, bottom 0.5s; }
         .toast.show { visibility: visible; opacity: 1; bottom: 50px; }
     </style>
 </head>
-<body class="bg-gray-50 text-gray-800">
+<body class="text-gray-800 bg-white h-screen flex flex-col md:flex-row overflow-hidden">
 
-    <div class="max-w-6xl mx-auto p-4 flex flex-col md:flex-row gap-6">
-        <aside class="w-full md:w-1/3 space-y-4">
-            <div class="bg-white p-4 rounded shadow">
-                <h2 class="font-bold mb-2">📡 ตั้งค่า Server</h2>
-                <input type="text" id="serverUrlInput" placeholder="ใส่ URL จาก Render ที่นี่..." class="w-full p-2 border rounded text-xs mb-2 bg-yellow-50 border-yellow-300">
-                <p class="text-xs text-gray-500">*ถ้ายังไม่มี ให้ Deploy บน Render ก่อนแล้วนำ URL มาใส่ (เช่น https://my-app.onrender.com)</p>
-            </div>
+    <aside class="w-full md:w-80 bg-gray-50 border-r border-gray-200 flex-shrink-0 h-full overflow-y-auto p-6 flex flex-col gap-4 z-20">
+        
+        <div class="bg-yellow-50 border border-yellow-200 rounded p-3">
+            <h3 class="font-bold text-xs text-yellow-800 uppercase mb-2">📡 ตั้งค่า Server (Render)</h3>
+            <input type="text" id="serverUrlInput" placeholder="https://xxx.onrender.com" class="w-full p-2 border rounded text-xs mb-2">
+            <p class="text-[10px] text-gray-500">*ใส่ URL ที่ได้จาก Render แล้วกด Enter หรือคลิกที่ว่างเพื่อบันทึก</p>
+        </div>
 
-            <div class="bg-white p-4 rounded shadow">
-                <h2 class="font-bold mb-2">👤 ผู้สมัครงาน (จำลอง)</h2>
-                <input type="tel" id="phoneInput" value="0899998888" class="w-full p-2 border rounded mb-2">
-                <button onclick="subscribeUser()" id="btnSub" class="w-full bg-blue-600 text-white py-2 rounded hover:bg-blue-700">🔔 เปิดรับแจ้งเตือน</button>
-            </div>
-
-            <div class="bg-white p-4 rounded shadow">
-                <h2 class="font-bold mb-2">🏢 เลือกสาขา</h2>
-                <div id="branchList" class="space-y-1 text-sm h-40 overflow-y-auto"></div>
-            </div>
+        <div class="bg-blue-50 border border-blue-200 rounded p-4">
+            <h3 class="font-bold text-xs text-blue-800 uppercase mb-2">📱 ผู้ใช้งาน (จำลอง)</h3>
+            <input type="tel" id="userPhoneInput" value="0896689687" class="w-full p-2 border border-blue-200 rounded text-sm mb-2 text-center font-bold font-mono">
             
-            <button onclick="triggerPush()" class="w-full bg-red-600 text-white py-3 rounded font-bold shadow hover:bg-red-700">🚀 ยิงแคมเปญแจ้งเตือน</button>
-        </aside>
+            <button onclick="subscribeUser()" id="btnSubscribe" class="w-full bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold py-2 px-4 rounded shadow transition-colors flex items-center justify-center gap-2">
+                🔔 1. เชื่อมต่อ (Subscribe)
+            </button>
+            <div id="subStatus" class="text-xs text-center mt-2 text-gray-500">สถานะ: รอการเชื่อมต่อ</div>
+        </div>
 
-        <main class="flex-1 space-y-4">
-            <div class="bg-white p-4 rounded shadow h-full">
-                <div id="map"></div>
-                <div class="mt-4">
-                    <h3 class="font-bold">รายชื่อกลุ่มเป้าหมาย</h3>
-                    <div id="userList" class="text-sm text-gray-600 mt-2">กำลังโหลด...</div>
-                </div>
-            </div>
-        </main>
-    </div>
+        <div>
+            <div class="text-xs font-semibold text-gray-500 uppercase mb-2">เลือกสาขา</div>
+            <div id="branchList" class="h-48 overflow-y-auto border border-gray-300 rounded bg-white p-2 space-y-2 text-sm"></div>
+        </div>
 
-    <div id="toast" class="toast">...</div>
+        <button onclick="triggerPush()" class="w-full bg-red-600 hover:bg-red-700 text-white font-bold py-3 px-4 rounded shadow-lg transition-transform hover:scale-[1.02]">
+            🚀 2. ยิงแคมเปญแจ้งเตือน
+        </button>
+        
+        <p class="text-xs text-gray-400 mt-auto">ระบบ Web Push Notification (VAPID)</p>
+    </aside>
 
-    <script>
-        // CONFIG
-        const publicVapidKey = 'BADoIRIstMKN9nMxO2GapvbSSssA84-1ByEFexro6syeZScJoajrGAXDPA_atNhl0SmxfeazS-ZPUGZH3DaHvnY';
-        let SERVER_URL = ''; // จะถูกเซ็ตจาก Input
-
-        // DATA
-        const BRANCHES = [
-            { id: 'MK01', name: 'Makro Sathorn', lat: 13.7025, lon: 100.5431 },
-            { id: 'MK02', name: 'Makro Ladprao', lat: 13.7663, lon: 100.6409 }
-        ];
-        let map, userLayer, branchLayer;
-
-        // --- 1. SETUP UI ---
-        window.onload = () => {
-            // โหลด URL ที่เคยใส่ไว้
-            const savedUrl = localStorage.getItem('pushServerUrl');
-            if(savedUrl) document.getElementById('serverUrlInput').value = savedUrl;
-
-            // Map
-            map = L.map('map').setView([13.75, 100.55], 11);
-            L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png').addTo(map);
-            userLayer = L.layerGroup().addTo(map);
-            branchLayer = L.layerGroup().addTo(map);
-
-            renderBranches();
-            renderRandomUsers();
-        };
-
-        function getServerUrl() {
-            const url = document.getElementById('serverUrlInput').value.replace(/\/$/, ""); // ลบ / ตัวท้าย
-            if(!url) { alert('กรุณาใส่ Server URL ก่อน'); return null; }
-            localStorage.setItem('pushServerUrl', url);
-            return url;
-        }
-
-        // --- 2. PUSH LOGIC ---
-        function urlBase64ToUint8Array(base64String) {
-            const padding = '='.repeat((4 - base64String.length % 4) % 4);
-            const base64 = (base64String + padding).replace(/\-/g, '+').replace(/_/g, '/');
-            const rawData = window.atob(base64);
-            const outputArray = new Uint8Array(rawData.length);
-            for (let i = 0; i < rawData.length; ++i) outputArray[i] = rawData.charCodeAt(i);
-            return outputArray;
-        }
-
-        async function subscribeUser() {
-            const url = getServerUrl();
-            if(!url) return;
-
-            if ('serviceWorker' in navigator) {
-                try {
-                    const register = await navigator.serviceWorker.register('worker.js');
-                    const subscription = await register.pushManager.subscribe({
-                        userVisibleOnly: true,
-                        applicationServerKey: urlBase64ToUint8Array(publicVapidKey)
-                    });
-
-                    await fetch(`${url}/subscribe`, {
-                        method: 'POST',
-                        body: JSON.stringify(subscription),
-                        headers: {'content-type': 'application/json'}
-                    });
-                    
-                    showToast('✅ เชื่อมต่อสำเร็จ! พร้อมรับงาน');
-                    document.getElementById('btnSub').innerText = 'เรียบร้อย (Registered)';
-                    document.getElementById('btnSub').classList.add('bg-green-600');
-                } catch (err) {
-                    console.error(err);
-                    showToast('❌ ผิดพลาด: ' + err.message);
-                }
-            } else {
-                alert('Browser นี้ไม่รองรับ Push Notification');
-            }
-        }
-
-        async function triggerPush() {
-            const url = getServerUrl();
-            if(!url) return;
-
-            try {
-                await fetch(`${url}/trigger-push`, {
-                    method: 'POST',
-                    body: JSON.stringify({ branch: 'Makro Sathorn', message: 'ต้องการพนักงานด่วน!' }),
-                    headers: {'content-type': 'application/json'}
-                });
-                showToast('🚀 ส่งคำสั่งไปยัง Server แล้ว');
-            } catch (err) {
-                showToast('❌ ส่งไม่ผ่าน Check Console');
-            }
-        }
-
-        // --- 3. HELPER ---
-        function showToast(msg) {
-            const t = document.getElementById('toast');
-            t.textContent = msg;
-            t.className = "toast show";
-            setTimeout(() => t.className = t.className.replace("show", ""), 3000);
-        }
-
-        function renderBranches() {
-            const container = document.getElementById('branchList');
-            BRANCHES.forEach(b => {
-                L.marker([b.lat, b.lon]).addTo(branchLayer).bindPopup(b.name);
-                container.innerHTML += `<div class="flex items-center gap-2"><input type="checkbox" checked> ${b.name}</div>`;
-            });
-        }
-
-        function renderRandomUsers() {
-            for(let i=0; i<20; i++) {
-                const lat = 13.65 + Math.random() * 0.2;
-                const lon = 100.45 + Math.random() * 0.2;
-                L.circleMarker([lat, lon], {radius: 4, color: 'blue'}).addTo(userLayer);
-            }
-        }
-    </script>
-</body>
-</html>
+    <main class="flex-1 h-full overflow-y-auto p-4 md:p-8 relative z-10 bg-gray-50">
+        <div class="max-w-6xl mx-auto space-y-6">
+            <div>
+                <h1 class="text-2xl font-bold text-gray-900">📍 ระบบจับคู่ตำแหน่งงานว่าง</h1>
+                <p class="text-
