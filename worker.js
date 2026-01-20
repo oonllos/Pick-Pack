@@ -1,30 +1,38 @@
-// worker.js - ฉบับรองรับการเปิดหน้า apply.html
+// worker.js - ฉบับแก้ไข (Fix Navigation Issue)
 
 self.addEventListener('push', function(event) {
-  // รับข้อมูลที่ส่งมาจาก index.js
-  const data = event.data.json();
+  let data = {};
+  if (event.data) {
+    try {
+      data = event.data.json();
+    } catch (e) {
+      console.error('Push data parse failed', e);
+    }
+  }
   
   const options = {
-    body: data.body,
+    body: data.body || 'มีงานใหม่เข้ามา!',
     icon: data.icon || 'https://cdn-icons-png.flaticon.com/512/3135/3135715.png',
     badge: 'https://cdn-icons-png.flaticon.com/512/3135/3135715.png',
     vibrate: [100, 50, 100],
-    // สำคัญ: ส่งต่อ object data (ที่มี url) ไปให้ event click ใช้งาน
-    data: data.data 
+    // ส่งต่อ object data ทั้งก้อนไปให้ event click
+    data: data.data || {} 
   };
 
   event.waitUntil(
-    self.registration.showNotification(data.title, options)
+    self.registration.showNotification(data.title || 'Makro Job Alert', options)
   );
 });
 
 self.addEventListener('notificationclick', function(event) {
-  // 1. ปิดการแจ้งเตือนทันทีที่กด
+  // 1. ปิดการแจ้งเตือนทันที
   event.notification.close();
 
-  // 2. ดึง URL ที่แนบมา (จาก index.js)
-  // ถ้าไม่มีแนบมา ให้เปิดหน้า apply.html เป็นค่า Default
-  let urlToOpen = event.notification.data.url;
+  // 2. ดึง URL อย่างปลอดภัย (ป้องกัน Error)
+  const notificationData = event.notification.data || {};
+  let urlToOpen = notificationData.url;
+
+  // ถ้าไม่มี URL แนบมา ให้ใช้ค่า Default นี้
   if (!urlToOpen) {
       urlToOpen = 'https://oonllos.github.io/Pick-Pack/apply.html';
   }
@@ -32,16 +40,18 @@ self.addEventListener('notificationclick', function(event) {
   // 3. สั่งให้เปิดหน้าเว็บ
   event.waitUntil(
     clients.matchAll({type: 'window', includeUncontrolled: true}).then(function(windowClients) {
-      // กรณี A: ถ้าเปิดเว็บนี้ค้างไว้อยู่แล้ว (ไม่ว่าจะหน้าไหน)
+      // กรณี A: ถ้ามีหน้าเว็บของแอพเปิดค้างไว้อยู่แล้ว
       for (let i = 0; i < windowClients.length; i++) {
         const client = windowClients[i];
-        // ตรวจสอบว่าเป็นเว็บเดียวกันไหม
+        // ตรวจสอบว่าเป็นเว็บเราไหม (เช็คจากชื่อโฟลเดอร์ Pick-Pack)
         if (client.url.includes('Pick-Pack') && 'focus' in client) {
-            // สั่งเปลี่ยนหน้าไปที่ apply.html แล้วเด้งขึ้นมาดู
-            return client.navigate(urlToOpen).then(client => client.focus());
+            // สเต็ปสำคัญ: สั่ง Focus เรียกหน้าจอก่อน แล้วค่อยโหลดหน้าใหม่
+            return client.focus().then(() => {
+                return client.navigate(urlToOpen);
+            });
         }
       }
-      // กรณี B: ถ้ายังไม่เปิด ให้เปิดหน้าต่างใหม่เลย
+      // กรณี B: ถ้ายังไม่เปิดเลย ให้เปิดหน้าต่างใหม่
       if (clients.openWindow) {
         return clients.openWindow(urlToOpen);
       }
